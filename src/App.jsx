@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { sGet, sSet, sList, loadRoster, subscribeKey, subscribePrefix } from "./storage.js";
+import {
+  spotifyConfigured, spotifyHasToken, spotifyLogin, spotifyLogout, spotifyHandleRedirect,
+  startSpeaker, parseSpotifyLink, playOnDevice,
+} from "./spotify.js";
 
 /* ------------------------------------------------------------------ */
 /*  HORSE RACE — multiplayer card drinking game (Quiplash-style join)  */
@@ -71,6 +75,154 @@ const sfx = (() => {
   };
 })();
 
+/* ---------------- home-screen atmosphere (synthesized, Red Right Hand vibes) ---------------- */
+/* Plays on the home screen and through the lobby/betting on the host + big screen,
+   fading out the moment the race starts. Player phones stay quiet (one speaker is enough). */
+
+const rrh = (() => {
+  let screen = "home";
+  let phase = null;
+  let playing = false;
+  let stop = null;
+  let muted = false;
+  let noiseBuf = null;
+
+  const ctx = () => sfx.unlock();
+  const wants = () => !muted && (screen === "home" || phase === "lobby" || phase === "betting");
+
+  function noise(c) {
+    if (!noiseBuf) {
+      noiseBuf = c.createBuffer(1, Math.floor(c.sampleRate * 0.1), c.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    return noiseBuf;
+  }
+
+  function start() {
+    const c = ctx();
+    if (!c || c.state !== "running" || playing) return;
+    playing = true;
+    const master = c.createGain();
+    master.gain.setValueAtTime(0.0001, c.currentTime);
+    master.gain.linearRampToValueAtTime(1, c.currentTime + 1.6);
+    master.connect(c.destination);
+
+    const spb = 60 / 54; // ~54 bpm, slow and ominous
+    const barLen = 4 * spb;
+    let bar = 0;
+    let next = c.currentTime + 0.1;
+
+    const tone = (f, t, d, type, g, dest, attack = 0.01) => {
+      const o = c.createOscillator();
+      const gn = c.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f, t);
+      gn.gain.setValueAtTime(0.0001, t);
+      gn.gain.linearRampToValueAtTime(g, t + attack);
+      gn.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(gn);
+      gn.connect(dest || master);
+      o.start(t);
+      o.stop(t + d + 0.05);
+    };
+
+    const scheduleBar = (t) => {
+      for (let b = 0; b < 4; b++) {
+        const bt = t + b * spb;
+        // bass throb
+        tone(61.74, bt, 0.7, "triangle", 0.1);
+        // distant kick: fast pitch drop
+        const k = c.createOscillator();
+        const kg = c.createGain();
+        k.type = "sine";
+        k.frequency.setValueAtTime(110, bt);
+        k.frequency.exponentialRampToValueAtTime(38, bt + 0.18);
+        kg.gain.setValueAtTime(0.14, bt);
+        kg.gain.exponentialRampToValueAtTime(0.0001, bt + 0.3);
+        k.connect(kg); kg.connect(master);
+        k.start(bt); k.stop(bt + 0.35);
+        // offbeat shaker
+        const sh = c.createBufferSource();
+        sh.buffer = noise(c);
+        const hp = c.createBiquadFilter();
+        hp.type = "highpass";
+        hp.frequency.value = 5200;
+        const shg = c.createGain();
+        shg.gain.setValueAtTime(0.028, bt + spb / 2);
+        shg.gain.exponentialRampToValueAtTime(0.0001, bt + spb / 2 + 0.07);
+        sh.connect(hp); hp.connect(shg); shg.connect(master);
+        sh.start(bt + spb / 2); sh.stop(bt + spb / 2 + 0.09);
+      }
+      // dark organ chord (B minor) swelling through a lowpass
+      const lp = c.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = 420;
+      lp.connect(master);
+      [123.47, 146.83, 185.0].forEach((f) => tone(f, t, barLen * 0.98, "sawtooth", 0.028, lp, 0.6));
+      // eerie high drone with slow vibrato
+      const dr = c.createOscillator();
+      const drg = c.createGain();
+      const lfo = c.createOscillator();
+      const lfog = c.createGain();
+      dr.type = "sine";
+      dr.frequency.setValueAtTime(739.99, t);
+      lfo.frequency.setValueAtTime(4.5, t);
+      lfog.gain.setValueAtTime(6, t);
+      lfo.connect(lfog); lfog.connect(dr.frequency);
+      drg.gain.setValueAtTime(0.0001, t);
+      drg.gain.linearRampToValueAtTime(0.013, t + 1);
+      drg.gain.exponentialRampToValueAtTime(0.0001, t + barLen);
+      dr.connect(drg); drg.connect(master);
+      dr.start(t); dr.stop(t + barLen + 0.1);
+      lfo.start(t); lfo.stop(t + barLen + 0.1);
+      // the descending riff, every other bar: D → C# → B
+      if (bar % 2 === 1) {
+        [[293.66, 2.0], [277.18, 2.75], [246.94, 3.5]].forEach(([f, b]) =>
+          tone(f, t + b * spb, 0.65, "sawtooth", 0.045, master, 0.02));
+      }
+      // the bell toll, every fourth bar
+      if (bar % 4 === 0) {
+        [[246.94, 3.2, 0.06], [493.88, 2.6, 0.028], [739.99, 2.0, 0.013], [1244.51, 1.5, 0.007]].forEach(([f, d, g]) =>
+          tone(f, t, d, "sine", g, master, 0.005));
+      }
+      bar += 1;
+      return barLen;
+    };
+
+    while (next < c.currentTime + 0.6) next += scheduleBar(next);
+    const iv = setInterval(() => {
+      while (next < c.currentTime + 0.6) next += scheduleBar(next);
+    }, 200);
+
+    stop = () => {
+      clearInterval(iv);
+      master.gain.setTargetAtTime(0.0001, c.currentTime, 0.5);
+      setTimeout(() => { try { master.disconnect(); } catch { /* fine */ } }, 2600);
+    };
+  }
+
+  function update() {
+    if (wants() && !playing) start();
+    else if (!wants() && playing) {
+      playing = false;
+      if (stop) { stop(); stop = null; }
+    }
+  }
+
+  return {
+    setScreen(s) { screen = s; update(); },
+    setPhase(p) { phase = p; update(); },
+    setMuted(v) { muted = v; update(); },
+    poke() {
+      const c = ctx();
+      if (!c) return;
+      if (c.state === "running") update();
+      else c.resume().then(update).catch(() => {});
+    },
+  };
+})();
+
 /**
  * Watches room state and fires draw / flip / everyone-drinks / result sounds.
  * myWin: true → win fanfare at results, false → sad trombone,
@@ -111,7 +263,7 @@ function SoundToggle() {
   return (
     <button
       aria-label={on ? "Mute sound" : "Unmute sound"}
-      onClick={() => { sfx.setEnabled(!on); setOn(!on); }}
+      onClick={() => { sfx.setEnabled(!on); rrh.setMuted(on); setOn(!on); }}
       style={{
         position: "fixed", top: 10, right: 10, zIndex: 50,
         width: 42, height: 42, borderRadius: "50%",
@@ -515,10 +667,300 @@ function outcome(bet, winner) {
 }
 
 /* ================================================================ */
+/*  SHARED RIDER LOGIC (used by both players and the host)          */
+/* ================================================================ */
+
+function useRider(code, name, room) {
+  const id = slug(name || "");
+  const joinedAtRef = useRef(Date.now());
+  const [suit, setSuit] = useState(null);
+  const [drinks, setDrinks] = useState(2);
+  const [placedRound, setPlacedRound] = useState(0);
+  const [alloc, setAlloc] = useState({});
+  const [gaveRound, setGaveRound] = useState(0);
+
+  // register once — never clobber an existing bet (rejoin restores it)
+  useEffect(() => {
+    if (!code || !name) return;
+    let live = true;
+    (async () => {
+      const existing = await sGet(playerKey(code, id));
+      if (!live) return;
+      if (existing) {
+        await sSet(playerKey(code, id), { ...existing, name });
+        if (existing.suit) {
+          setSuit(existing.suit);
+          setDrinks(existing.drinks || 2);
+          setPlacedRound(existing.roundId || 0);
+        }
+      } else {
+        await sSet(playerKey(code, id), { name, joinedAt: joinedAtRef.current, suit: null, drinks: 0, roundId: 0 });
+      }
+    })();
+    return () => { live = false; };
+  }, [code, id, name]);
+
+  // reset sip allocation when a new round starts
+  useEffect(() => { setAlloc({}); }, [room?.round?.roundId]);
+
+  const roundId = room?.round?.roundId;
+  const betPlaced = room ? placedRound === roundId : false;
+
+  const placeBet = async () => {
+    await sSet(playerKey(code, id), { name, joinedAt: joinedAtRef.current, suit, drinks, roundId });
+    setPlacedRound(roundId);
+  };
+
+  const lockGives = async () => {
+    await sSet(playerKey(code, id), {
+      name, joinedAt: joinedAtRef.current, suit, drinks, roundId,
+      gives: alloc, givesRound: roundId,
+    });
+    setGaveRound(roundId);
+    sfx.sent();
+  };
+
+  return {
+    id, suit, setSuit, drinks, setDrinks, betPlaced, setPlacedRound,
+    alloc, setAlloc, gaveRound, setGaveRound, placeBet, lockGives,
+  };
+}
+
+/* the suit picker + wager form (shown during betting, before a bet is locked) */
+function BetForm({ rider }) {
+  const { suit, setSuit, drinks, setDrinks, placeBet } = rider;
+  return (
+    <>
+      <div style={{ fontSize: 13, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>Pick your horse</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 18 }}>
+        {SUIT_KEYS.map((s) => (
+          <button key={s} className="hr-btn" onClick={() => setSuit(s)} style={{
+            background: suit === s ? C.card : C.turf,
+            color: suit === s ? (SUITS[s].red ? C.red : C.ink) : C.chalk,
+            border: `2px solid ${suit === s ? C.tote : C.rail}`,
+            padding: "10px 0 6px",
+          }}>
+            <span style={{ display: "block", width: 74, height: 54, margin: "0 auto" }}>
+              <Horse s={s} galloping={suit === s} />
+            </span>
+            <span style={{ fontSize: 15 }}>
+              <span style={{ fontSize: 18, color: suit === s ? (SUITS[s].red ? C.red : C.ink) : (SUITS[s].red ? C.red : C.chalk) }}>{SUITS[s].sym}</span> {SUITS[s].name}
+            </span>
+          </button>
+        ))}
+      </div>
+      <div style={{ fontSize: 13, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>Wager (sips)</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 18, marginBottom: 18 }}>
+        <button className="hr-btn" style={{ width: 56, background: C.turf, color: C.chalk, border: `2px solid ${C.rail}` }} onClick={() => setDrinks(Math.max(1, drinks - 1))}>−</button>
+        <span className="hr-display" style={{ fontSize: 48, color: C.tote, minWidth: 60, textAlign: "center" }}>{drinks}</span>
+        <button className="hr-btn" style={{ width: 56, background: C.turf, color: C.chalk, border: `2px solid ${C.rail}` }} onClick={() => setDrinks(Math.min(10, drinks + 1))}>+</button>
+      </div>
+      <div style={{ fontSize: 13, color: C.chalkDim, textAlign: "center", marginBottom: 14 }}>
+        Win: give out {drinks * 2} sips · Lose: drink {drinks}
+      </div>
+      <button className="hr-btn" style={{ background: C.tote, color: C.ink }} disabled={!suit} onClick={placeBet}>
+        Lock it in
+      </button>
+    </>
+  );
+}
+
+/* personal results: outcome card, incoming sips, and the winner's give-out UI */
+function RiderResults({ rider, room, roster }) {
+  const { id, suit, drinks, betPlaced, alloc, setAlloc, gaveRound, setGaveRound, lockGives } = rider;
+  const bet = betPlaced ? { suit, drinks } : null;
+  const o = outcome(bet, room.round.winner);
+  const won = o.give > 0;
+  const others = roster.filter((p) => p.id !== id);
+  const incoming = incomingFor(id, roster, room.round.roundId);
+  const incTotal = incoming.reduce((a, q) => a + q.n, 0);
+  const assigned = Object.values(alloc).reduce((a, b) => a + (b || 0), 0);
+  const left = o.give - assigned;
+  const gavesLocked = gaveRound === room.round.roundId;
+  return (
+    <div>
+      <div className="hr-chip" style={{ marginTop: 16, textAlign: "center", background: won ? "rgba(240,194,75,.15)" : C.turf, border: `2px solid ${won ? C.tote : C.rail}`, borderRadius: 16, padding: 22 }}>
+        <div style={{ fontSize: 44 }}>{won ? "🏆" : bet ? "🍺" : "😶"}</div>
+        <div className="hr-display" style={{ fontSize: 26, color: won ? C.tote : C.chalk }}>{o.label}</div>
+      </div>
+
+      {incoming.map((q, i) => (
+        <div key={i} className="hr-chip" style={{ marginTop: 8, background: "rgba(224,82,82,.12)", border: `1px solid ${C.red}`, borderRadius: 12, padding: "12px 14px", textAlign: "center" }}>
+          🍺 <b>{q.from}</b> sent you <b style={{ color: C.red }}>{q.n} sips</b>
+        </div>
+      ))}
+      {incTotal > 0 && (
+        <div style={{ textAlign: "center", marginTop: 8, fontSize: 15 }}>
+          Total damage: <b style={{ color: C.red }}>{o.drink + incTotal} sips</b>
+        </div>
+      )}
+
+      {won && !gavesLocked && (
+        <div style={{ marginTop: 18 }}>
+          <div style={{ fontSize: 13, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>
+            Hand out your sips · <b style={{ color: left === 0 ? C.tote : C.chalk }}>{left} left</b>
+          </div>
+          {others.map((p) => {
+            const n = alloc[p.id] || 0;
+            return (
+              <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: n > 0 ? "rgba(240,194,75,.12)" : C.turf, border: `1px solid ${n > 0 ? C.tote : C.rail}`, borderRadius: 10, padding: "8px 12px", marginBottom: 6 }}>
+                <b style={{ flex: 1 }}>{p.name}</b>
+                <button className="hr-btn" style={{ width: 44, padding: "8px 0", background: C.turfDeep, color: C.chalk, border: `1px solid ${C.rail}` }}
+                  disabled={n === 0} onClick={() => setAlloc({ ...alloc, [p.id]: n - 1 })}>−</button>
+                <span className="hr-display" style={{ fontSize: 24, minWidth: 30, textAlign: "center", color: n > 0 ? C.tote : C.chalkDim }}>{n}</span>
+                <button className="hr-btn" style={{ width: 44, padding: "8px 0", background: C.turfDeep, color: C.chalk, border: `1px solid ${C.rail}` }}
+                  disabled={left === 0} onClick={() => setAlloc({ ...alloc, [p.id]: n + 1 })}>+</button>
+              </div>
+            );
+          })}
+          {others.length === 0 && <div style={{ color: C.chalkDim, fontStyle: "italic" }}>No other riders to punish — lucky them.</div>}
+          <button className="hr-btn" style={{ background: C.tote, color: C.ink, marginTop: 8 }}
+            disabled={others.length === 0 || left !== 0} onClick={lockGives}>
+            Send the sips 🍻
+          </button>
+        </div>
+      )}
+      {won && gavesLocked && (
+        <div className="hr-chip" style={{ marginTop: 14, textAlign: "center", background: C.turf, border: `1px solid ${C.rail}`, borderRadius: 12, padding: 14 }}>
+          Sent: {others.filter((p) => alloc[p.id] > 0).map((p) => `${p.name} (${alloc[p.id]})`).join(", ") || "—"}
+          <button className="hr-btn" style={{ background: "transparent", color: C.chalkDim, fontSize: 13, marginTop: 6 }} onClick={() => setGaveRound(0)}>
+            Change
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ================================================================ */
+/*  SPOTIFY PANEL (host + big screen; needs VITE_SPOTIFY_CLIENT_ID) */
+/* ================================================================ */
+
+function SpotifyPanel({ room, returnState, showSetupHint = false }) {
+  const [connected, setConnected] = useState(spotifyHasToken());
+  const [deviceId, setDeviceId] = useState(null);
+  const [starting, setStarting] = useState(false);
+  const [link, setLink] = useState("");
+  const [playing, setPlaying] = useState(false);
+  const [msg, setMsg] = useState("");
+  const playerRef = useRef(null);
+
+  // auto-duck the music during the 3-2-1 countdown, restore after the gallop
+  useEffect(() => {
+    const p = playerRef.current;
+    if (!p || !playing || !room) return;
+    if (room.round?.pendingAt) p.setVolume(0.12).catch(() => {});
+  }, [room?.round?.pendingAt, playing, room]);
+  useEffect(() => {
+    const p = playerRef.current;
+    if (!p || !playing || !room) return;
+    if (!room.round?.pendingAt && room.round?.drawIdx > 0) {
+      const t = setTimeout(() => p.setVolume(0.6).catch(() => {}), 2600);
+      return () => clearTimeout(t);
+    }
+  }, [room?.round?.drawIdx, room?.round?.pendingAt, playing, room]);
+
+  if (!spotifyConfigured()) {
+    if (!showSetupHint) return null;
+    return (
+      <div style={{ marginTop: 16, textAlign: "center", color: C.chalkDim, fontSize: 12 }}>
+        🎧 Spotify available — add VITE_SPOTIFY_CLIENT_ID to enable (see setup notes).
+      </div>
+    );
+  }
+
+  const box = { marginTop: 16, background: C.turf, border: `1px solid ${C.rail}`, borderRadius: 12, padding: 14 };
+  const label = { fontSize: 13, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" };
+
+  const startPlayer = async () => {
+    setStarting(true);
+    setMsg("");
+    try {
+      await startSpeaker({
+        onReady: (player, id) => {
+          playerRef.current = player;
+          setDeviceId(id);
+          setStarting(false);
+        },
+        onError: (m) => { setMsg(m); setStarting(false); },
+      });
+    } catch (e) {
+      setMsg(String(e.message || e));
+      setStarting(false);
+    }
+  };
+
+  const play = async () => {
+    const uri = parseSpotifyLink(link);
+    if (!uri) { setMsg("Paste a Spotify playlist, album, or track link."); return; }
+    setMsg("");
+    try {
+      await playOnDevice(uri, deviceId);
+      setPlaying(true);
+    } catch (e) {
+      setMsg(String(e.message || e));
+    }
+  };
+
+  return (
+    <div style={box}>
+      <div style={label}>
+        <span>🎧 Spotify</span>
+        <span style={{ color: connected ? C.tote : C.chalkDim, textTransform: "none", letterSpacing: 0 }}>
+          {connected ? (deviceId ? "speaker ready" : "connected") : "not connected"}
+        </span>
+      </div>
+      {!connected && (
+        <button className="hr-btn" style={{ background: "#1DB954", color: "#0A2010", fontSize: 15 }}
+          onClick={() => spotifyLogin(returnState)}>
+          Connect Spotify
+        </button>
+      )}
+      {connected && !deviceId && (
+        <>
+          <button className="hr-btn" style={{ background: "#1DB954", color: "#0A2010", fontSize: 15 }}
+            disabled={starting} onClick={startPlayer}>
+            {starting ? "Starting…" : "Use this device as the speaker"}
+          </button>
+          <div style={{ color: C.chalkDim, fontSize: 12, marginTop: 6, textAlign: "center" }}>
+            Needs Spotify Premium. Do this on whichever device is hooked to the sound.
+          </div>
+        </>
+      )}
+      {connected && deviceId && (
+        <>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input className="hr-input" placeholder="Paste a playlist link" value={link}
+              onChange={(e) => setLink(e.target.value)} style={{ fontSize: 14, padding: 10, flex: 1 }} />
+            <button className="hr-btn" style={{ width: 90, background: "#1DB954", color: "#0A2010", fontSize: 15 }} onClick={play}>
+              Play
+            </button>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+            <button className="hr-btn" style={{ width: 110, padding: "8px 0", background: C.turfDeep, color: C.chalk, border: `1px solid ${C.rail}`, fontSize: 13 }}
+              onClick={() => { playerRef.current?.togglePlay(); }}>
+              Play / pause
+            </button>
+            <span style={{ color: C.chalkDim, fontSize: 12 }}>Auto-ducks during the countdown</span>
+          </div>
+        </>
+      )}
+      {connected && (
+        <button className="hr-btn" style={{ background: "transparent", color: C.chalkDim, fontSize: 12, marginTop: 4 }}
+          onClick={() => { spotifyLogout(); setConnected(false); setDeviceId(null); setPlaying(false); playerRef.current?.disconnect(); playerRef.current = null; }}>
+          Disconnect
+        </button>
+      )}
+      {msg && <div style={{ color: C.red, fontSize: 13, marginTop: 8, textAlign: "center" }}>{msg}</div>}
+    </div>
+  );
+}
+
+/* ================================================================ */
 /*  HOST                                                            */
 /* ================================================================ */
 
-function HostView({ resumeCode, onExit }) {
+function HostView({ name, resumeCode, onExit }) {
   const [code, setCode] = useState(resumeCode || null);
   const [room, setRoom] = useState(null);
   const [players, setPlayers] = useState([]);
@@ -527,7 +969,16 @@ function HostView({ resumeCode, onExit }) {
   const roomRef = useRef(null);
   roomRef.current = room;
 
-  useRaceSfx(room);
+  // the host rides too: registered as a player, can bet and win like anyone
+  const rider = useRider(code, name, room);
+
+  // lobby/betting atmosphere; fades out when the race starts
+  useEffect(() => {
+    rrh.setPhase(room?.phase || null);
+    return () => rrh.setPhase(null);
+  }, [room?.phase]);
+  const myWin = room?.phase === "results" ? (rider.betPlaced ? rider.suit === room.round.winner : "spect") : "spect";
+  useRaceSfx(room, myWin);
 
   const writeRoom = useCallback(async (r) => {
     setRoom(r);
@@ -653,6 +1104,22 @@ function HostView({ resumeCode, onExit }) {
             </span>
           </button>
 
+          {/* the host's own bet */}
+          {room.phase === "betting" && (
+            <div style={{ marginTop: 18 }}>
+              {!rider.betPlaced ? (
+                <BetForm rider={rider} />
+              ) : (
+                <div className="hr-chip" style={{ textAlign: "center", background: C.turf, border: `1px solid ${C.rail}`, borderRadius: 12, padding: 14 }}>
+                  Your bet: <b>{rider.drinks} sips on {SUITS[rider.suit].sym} {SUITS[rider.suit].name}</b>
+                  <button className="hr-btn" style={{ background: "transparent", color: C.chalkDim, fontSize: 13, marginTop: 4 }} onClick={() => rider.setPlacedRound(0)}>
+                    Change bet
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           <div style={{ margin: "16px 0" }}>
             <div style={{ fontSize: 13, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>
               {players.length} rider{players.length !== 1 ? "s" : ""} in · {betCount} bet{betCount !== 1 ? "s" : ""} placed
@@ -661,7 +1128,7 @@ function HostView({ resumeCode, onExit }) {
               const hasBet = p.roundId === room.round.roundId && p.suit;
               return (
                 <div key={p.id} className="hr-chip" style={{ display: "flex", justifyContent: "space-between", background: C.turf, border: `1px solid ${C.rail}`, borderRadius: 10, padding: "10px 14px", marginBottom: 6 }}>
-                  <b>{p.name}</b>
+                  <b>{p.name}{p.id === rider.id ? " (you)" : ""}</b>
                   <span style={{ color: hasBet ? C.tote : C.chalkDim }}>
                     {hasBet ? <>{SUITS[p.suit].sym} · {p.drinks} sips</> : "deciding…"}
                   </span>
@@ -702,6 +1169,11 @@ function HostView({ resumeCode, onExit }) {
                   ? "Tap to draw — you set the pace."
                   : `${room.round.drawIdx} drawn · ${room.round.deck.length - room.round.drawIdx} left in the deck`}
               </div>
+              {rider.betPlaced && (
+                <div style={{ textAlign: "center", color: C.chalkDim, fontSize: 13, marginTop: 4 }}>
+                  You're on {SUITS[rider.suit].sym} {SUITS[rider.suit].name} for {rider.drinks} sips.
+                </div>
+              )}
             </div>
           </div>
         </>
@@ -710,7 +1182,14 @@ function HostView({ resumeCode, onExit }) {
       {room.phase === "results" && (
         <>
           <Track round={room.round} racing={false} rules={room.rules} />
+
+          {/* the host's own result + sip hand-out */}
+          <RiderResults rider={rider} room={room} roster={players} />
+
           <div style={{ margin: "16px 0" }}>
+            <div style={{ fontSize: 13, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>
+              The damage
+            </div>
             {players.map((p) => {
               const bet = p.roundId === room.round.roundId ? p : null;
               const o = outcome(bet, room.round.winner);
@@ -719,7 +1198,7 @@ function HostView({ resumeCode, onExit }) {
               return (
                 <div key={p.id} className="hr-chip" style={{ background: o.give ? "rgba(240,194,75,.15)" : C.turf, border: `1px solid ${o.give ? C.tote : C.rail}`, borderRadius: 10, padding: "10px 14px", marginBottom: 6 }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <b>{p.name}</b>
+                    <b>{p.name}{p.id === rider.id ? " (you)" : ""}</b>
                     <span style={{ color: o.give ? C.tote : o.drink ? C.red : C.chalkDim }}>{o.label}</span>
                   </div>
                   {incTotal > 0 && (
@@ -731,15 +1210,15 @@ function HostView({ resumeCode, onExit }) {
               );
             })}
           </div>
-          <div style={{ color: C.chalkDim, fontSize: 13, textAlign: "center", marginBottom: 12 }}>
-            Winners are picking who drinks on their phones — sent sips show up here live.
-          </div>
           <button className="hr-btn" style={{ background: C.tote, color: C.ink }}
             onClick={() => writeRoom({ ...room, phase: "betting", round: freshRound(room.round.roundId + 1) })}>
             Race again
           </button>
         </>
       )}
+
+      <SpotifyPanel room={room} showSetupHint
+        returnState={{ screen: "resume", joinCode: code, name }} />
 
       <button className="hr-btn" style={{ background: "transparent", color: C.chalkDim, fontSize: 14, marginTop: 10 }} onClick={onExit}>
         Leave
@@ -758,6 +1237,12 @@ function BigScreenView({ code, onExit }) {
   const [gone, setGone] = useState(false);
 
   useRaceSfx(room);
+
+  // lobby/betting atmosphere; fades out when the race starts
+  useEffect(() => {
+    rrh.setPhase(room?.phase || null);
+    return () => rrh.setPhase(null);
+  }, [room?.phase]);
 
   // poll room
   useEffect(() => {
@@ -915,6 +1400,10 @@ function BigScreenView({ code, onExit }) {
         </div>
       )}
 
+      <div style={{ maxWidth: 440, margin: "0 auto" }}>
+        <SpotifyPanel room={room} returnState={{ screen: "bigscreen", joinCode: code }} />
+      </div>
+
       <div style={{ textAlign: "center", marginTop: 24 }}>
         <button className="hr-btn" style={{ background: "transparent", color: C.chalkDim, fontSize: 14, maxWidth: 200, margin: "0 auto" }} onClick={onExit}>
           Leave
@@ -932,42 +1421,13 @@ function BigScreenView({ code, onExit }) {
 function PlayerView({ code, name, onExit }) {
   const [room, setRoom] = useState(null);
   const [gone, setGone] = useState(false);
-  const [suit, setSuit] = useState(null);
-  const [drinks, setDrinks] = useState(2);
-  const [placedRound, setPlacedRound] = useState(0);
   const [roster, setRoster] = useState([]);
-  const [alloc, setAlloc] = useState({});
-  const [gaveRound, setGaveRound] = useState(0);
-  const id = slug(name);
 
-  const betPlaced = room ? placedRound === room.round.roundId : false;
-  const myWin = room?.phase === "results" ? (betPlaced ? suit === room.round.winner : null) : "spect";
+  const rider = useRider(code, name, room);
+  const myWin = room?.phase === "results" ? (rider.betPlaced ? rider.suit === room.round.winner : null) : "spect";
   useRaceSfx(room, myWin);
 
-  const joinedAtRef = useRef(Date.now());
-
-  // register once on join — never clobber an existing bet (e.g. after a page refresh,
-  // rejoin with the same name and your bet is restored)
-  useEffect(() => {
-    let live = true;
-    (async () => {
-      const existing = await sGet(playerKey(code, id));
-      if (!live) return;
-      if (existing) {
-        await sSet(playerKey(code, id), { ...existing, name });
-        if (existing.suit) {
-          setSuit(existing.suit);
-          setDrinks(existing.drinks || 2);
-          setPlacedRound(existing.roundId || 0);
-        }
-      } else {
-        await sSet(playerKey(code, id), { name, joinedAt: joinedAtRef.current, suit: null, drinks: 0, roundId: 0 });
-      }
-    })();
-    return () => { live = false; };
-  }, [code, id, name]);
-
-  // poll the room (faster during the race) — read-only, safe to restart on phase change
+  // poll the room — read-only; realtime does the heavy lifting
   useEffect(() => {
     let live = true;
     const load = async () => {
@@ -982,7 +1442,7 @@ function PlayerView({ code, name, onExit }) {
     return () => { live = false; unsub(); clearInterval(t); };
   }, [code]);
 
-  // during results, poll the full roster (to pick targets + see sips sent to you)
+  // during results, watch the full roster (to pick targets + see sips sent to you)
   useEffect(() => {
     if (room?.phase !== "results") return;
     let live = true;
@@ -995,24 +1455,6 @@ function PlayerView({ code, name, onExit }) {
     const t = setInterval(load, 8000);
     return () => { live = false; unsub(); clearInterval(t); };
   }, [room?.phase, code]);
-
-  // reset allocation when a new round starts
-  useEffect(() => { setAlloc({}); }, [room?.round?.roundId]);
-
-  const placeBet = async () => {
-    await sSet(playerKey(code, id), { name, joinedAt: joinedAtRef.current, suit, drinks, roundId: room.round.roundId });
-    setPlacedRound(room.round.roundId);
-  };
-
-  const lockGives = async () => {
-    await sSet(playerKey(code, id), {
-      name, joinedAt: joinedAtRef.current, suit, drinks,
-      roundId: room.round.roundId,
-      gives: alloc, givesRound: room.round.roundId,
-    });
-    setGaveRound(room.round.roundId);
-    sfx.sent();
-  };
 
   if (gone) return (
     <div className="hr-wrap" style={{ textAlign: "center", paddingTop: 60 }}>
@@ -1035,47 +1477,14 @@ function PlayerView({ code, name, onExit }) {
         </div>
       )}
 
-      {room.phase === "betting" && !betPlaced && (
-        <>
-          <div style={{ fontSize: 13, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>Pick your horse</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 18 }}>
-            {SUIT_KEYS.map((s) => (
-              <button key={s} className="hr-btn" onClick={() => setSuit(s)} style={{
-                background: suit === s ? C.card : C.turf,
-                color: suit === s ? (SUITS[s].red ? C.red : C.ink) : C.chalk,
-                border: `2px solid ${suit === s ? C.tote : C.rail}`,
-                padding: "10px 0 6px",
-              }}>
-                <span style={{ display: "block", width: 74, height: 54, margin: "0 auto" }}>
-                  <Horse s={s} galloping={suit === s} />
-                </span>
-                <span style={{ fontSize: 15 }}>
-                  <span style={{ fontSize: 18, color: suit === s ? (SUITS[s].red ? C.red : C.ink) : (SUITS[s].red ? C.red : C.chalk) }}>{SUITS[s].sym}</span> {SUITS[s].name}
-                </span>
-              </button>
-            ))}
-          </div>
-          <div style={{ fontSize: 13, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>Wager (sips)</div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 18, marginBottom: 18 }}>
-            <button className="hr-btn" style={{ width: 56, background: C.turf, color: C.chalk, border: `2px solid ${C.rail}` }} onClick={() => setDrinks(Math.max(1, drinks - 1))}>−</button>
-            <span className="hr-display" style={{ fontSize: 48, color: C.tote, minWidth: 60, textAlign: "center" }}>{drinks}</span>
-            <button className="hr-btn" style={{ width: 56, background: C.turf, color: C.chalk, border: `2px solid ${C.rail}` }} onClick={() => setDrinks(Math.min(10, drinks + 1))}>+</button>
-          </div>
-          <div style={{ fontSize: 13, color: C.chalkDim, textAlign: "center", marginBottom: 14 }}>
-            Win: give out {drinks * 2} sips · Lose: drink {drinks}
-          </div>
-          <button className="hr-btn" style={{ background: C.tote, color: C.ink }} disabled={!suit} onClick={placeBet}>
-            Lock it in
-          </button>
-        </>
-      )}
+      {room.phase === "betting" && !rider.betPlaced && <BetForm rider={rider} />}
 
-      {room.phase === "betting" && betPlaced && (
+      {room.phase === "betting" && rider.betPlaced && (
         <div style={{ textAlign: "center", padding: "40px 0" }}>
-          <div style={{ width: 150, height: 110, margin: "0 auto" }}><Horse s={suit} galloping /></div>
-          <p><b>{drinks} sips on {SUITS[suit].name}.</b></p>
+          <div style={{ width: 150, height: 110, margin: "0 auto" }}><Horse s={rider.suit} galloping /></div>
+          <p><b>{rider.drinks} sips on {SUITS[rider.suit].name}.</b></p>
           <p style={{ color: C.chalkDim, animation: "pulse 1.6s infinite" }}>Waiting for the gates to open…</p>
-          <button className="hr-btn" style={{ background: "transparent", color: C.chalkDim, fontSize: 14 }} onClick={() => setPlacedRound(0)}>Change bet</button>
+          <button className="hr-btn" style={{ background: "transparent", color: C.chalkDim, fontSize: 14 }} onClick={() => rider.setPlacedRound(0)}>Change bet</button>
         </div>
       )}
 
@@ -1084,88 +1493,24 @@ function PlayerView({ code, name, onExit }) {
           <Track round={room.round} racing rules={room.rules} />
           <div style={{ display: "flex", gap: 16, alignItems: "center", justifyContent: "center", marginTop: 14 }}>
             <DrawnCard round={room.round} />
-            {betPlaced && (
+            {rider.betPlaced && (
               <div style={{ color: C.chalkDim, fontSize: 14, maxWidth: 190 }}>
-                You're on {SUITS[suit].sym} {SUITS[suit].name} for {drinks} sips — go go go!
+                You're on {SUITS[rider.suit].sym} {SUITS[rider.suit].name} for {rider.drinks} sips — go go go!
               </div>
             )}
           </div>
         </>
       )}
 
-      {room.phase === "results" && (() => {
-        const bet = betPlaced ? { suit, drinks } : null;
-        const o = outcome(bet, room.round.winner);
-        const won = o.give > 0;
-        const others = roster.filter((p) => p.id !== id);
-        const incoming = incomingFor(id, roster, room.round.roundId);
-        const incTotal = incoming.reduce((a, q) => a + q.n, 0);
-        const assigned = Object.values(alloc).reduce((a, b) => a + (b || 0), 0);
-        const left = o.give - assigned;
-        const gavesLocked = gaveRound === room.round.roundId;
-        return (
-          <div>
-            <Track round={room.round} racing={false} rules={room.rules} />
-
-            {/* your result card */}
-            <div className="hr-chip" style={{ marginTop: 16, textAlign: "center", background: won ? "rgba(240,194,75,.15)" : C.turf, border: `2px solid ${won ? C.tote : C.rail}`, borderRadius: 16, padding: 22 }}>
-              <div style={{ fontSize: 44 }}>{won ? "🏆" : bet ? "🍺" : "😶"}</div>
-              <div className="hr-display" style={{ fontSize: 26, color: won ? C.tote : C.chalk }}>{o.label}</div>
-            </div>
-
-            {/* sips sent to you by winners */}
-            {incoming.map((q, i) => (
-              <div key={i} className="hr-chip" style={{ marginTop: 8, background: "rgba(224,82,82,.12)", border: `1px solid ${C.red}`, borderRadius: 12, padding: "12px 14px", textAlign: "center" }}>
-                🍺 <b>{q.from}</b> sent you <b style={{ color: C.red }}>{q.n} sips</b>
-              </div>
-            ))}
-            {incTotal > 0 && (
-              <div style={{ textAlign: "center", marginTop: 8, fontSize: 15 }}>
-                Total damage: <b style={{ color: C.red }}>{o.drink + incTotal} sips</b>
-              </div>
-            )}
-
-            {/* winner: hand out your sips */}
-            {won && !gavesLocked && (
-              <div style={{ marginTop: 18 }}>
-                <div style={{ fontSize: 13, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>
-                  Hand out your sips · <b style={{ color: left === 0 ? C.tote : C.chalk }}>{left} left</b>
-                </div>
-                {others.map((p) => {
-                  const n = alloc[p.id] || 0;
-                  return (
-                    <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: n > 0 ? "rgba(240,194,75,.12)" : C.turf, border: `1px solid ${n > 0 ? C.tote : C.rail}`, borderRadius: 10, padding: "8px 12px", marginBottom: 6 }}>
-                      <b style={{ flex: 1 }}>{p.name}</b>
-                      <button className="hr-btn" style={{ width: 44, padding: "8px 0", background: C.turfDeep, color: C.chalk, border: `1px solid ${C.rail}` }}
-                        disabled={n === 0} onClick={() => setAlloc({ ...alloc, [p.id]: n - 1 })}>−</button>
-                      <span className="hr-display" style={{ fontSize: 24, minWidth: 30, textAlign: "center", color: n > 0 ? C.tote : C.chalkDim }}>{n}</span>
-                      <button className="hr-btn" style={{ width: 44, padding: "8px 0", background: C.turfDeep, color: C.chalk, border: `1px solid ${C.rail}` }}
-                        disabled={left === 0} onClick={() => setAlloc({ ...alloc, [p.id]: n + 1 })}>+</button>
-                    </div>
-                  );
-                })}
-                {others.length === 0 && <div style={{ color: C.chalkDim, fontStyle: "italic" }}>No other riders to punish — lucky them.</div>}
-                <button className="hr-btn" style={{ background: C.tote, color: C.ink, marginTop: 8 }}
-                  disabled={others.length === 0 || left !== 0} onClick={lockGives}>
-                  Send the sips 🍻
-                </button>
-              </div>
-            )}
-            {won && gavesLocked && (
-              <div className="hr-chip" style={{ marginTop: 14, textAlign: "center", background: C.turf, border: `1px solid ${C.rail}`, borderRadius: 12, padding: 14 }}>
-                Sent: {others.filter((p) => alloc[p.id] > 0).map((p) => `${p.name} (${alloc[p.id]})`).join(", ") || "—"}
-                <button className="hr-btn" style={{ background: "transparent", color: C.chalkDim, fontSize: 13, marginTop: 6 }} onClick={() => setGaveRound(0)}>
-                  Change
-                </button>
-              </div>
-            )}
-
-            <p style={{ color: C.chalkDim, fontSize: 14, textAlign: "center", animation: "pulse 1.6s infinite", marginTop: 14 }}>
-              Waiting for the host to start the next race…
-            </p>
-          </div>
-        );
-      })()}
+      {room.phase === "results" && (
+        <div>
+          <Track round={room.round} racing={false} rules={room.rules} />
+          <RiderResults rider={rider} room={room} roster={roster} />
+          <p style={{ color: C.chalkDim, fontSize: 14, textAlign: "center", animation: "pulse 1.6s infinite", marginTop: 14 }}>
+            Waiting for the host to start the next race…
+          </p>
+        </div>
+      )}
 
       <button className="hr-btn" style={{ background: "transparent", color: C.chalkDim, fontSize: 14, marginTop: 10 }} onClick={onExit}>
         Leave
@@ -1187,9 +1532,24 @@ export default function App() {
 
   // unlock audio on the first tap anywhere (browser autoplay policy)
   useEffect(() => {
-    const h = () => sfx.unlock();
+    const h = () => { sfx.unlock(); rrh.poke(); };
     window.addEventListener("pointerdown", h, { once: true });
     return () => window.removeEventListener("pointerdown", h);
+  }, []);
+
+  // the atmosphere follows which screen we're on
+  useEffect(() => { rrh.setScreen(screen); }, [screen]);
+
+  // returning from Spotify authorization: restore where the user was
+  useEffect(() => {
+    (async () => {
+      const ret = await spotifyHandleRedirect();
+      if (ret) {
+        if (ret.name) setName(ret.name);
+        if (ret.joinCode) { setJoinCode(ret.joinCode); setResumeCode(ret.joinCode); }
+        if (ret.screen) setScreen(ret.screen);
+      }
+    })();
   }, []);
 
   return (
@@ -1200,12 +1560,16 @@ export default function App() {
         <div className="hr-wrap" style={{ paddingTop: 48 }}>
           <div style={{ width: 170, height: 120, margin: "0 auto 4px" }}><Horse s="H" galloping /></div>
           <ToteHeader sub="The card game · bet in sips" />
-          <button className="hr-btn" style={{ background: C.tote, color: C.ink, marginBottom: 20 }} onClick={() => setScreen("host")}>
+          <input className="hr-input" placeholder="Your name" value={name} maxLength={16}
+            onChange={(e) => setName(e.target.value)} style={{ marginBottom: 12 }} />
+          <button className="hr-btn" style={{ background: C.tote, color: C.ink, marginBottom: 6 }}
+            disabled={!name.trim()} onClick={() => setScreen("host")}>
             Host a race
           </button>
+          <div style={{ color: C.chalkDim, fontSize: 12, textAlign: "center", marginBottom: 14 }}>
+            Hosts ride too — you deal the cards and bet.
+          </div>
           <div style={{ borderTop: `1px dashed ${C.rail}`, margin: "6px 0 20px" }} />
-          <input className="hr-input" placeholder="Your name" value={name} maxLength={16}
-            onChange={(e) => setName(e.target.value)} style={{ marginBottom: 8 }} />
           <input className="hr-input" placeholder="Room code" value={joinCode} maxLength={4}
             onChange={(e) => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))}
             style={{ marginBottom: 12, textTransform: "uppercase", letterSpacing: ".2em", textAlign: "center" }} />
@@ -1231,8 +1595,8 @@ export default function App() {
           </p>
         </div>
       )}
-      {screen === "host" && <HostView onExit={exit} />}
-      {screen === "resume" && <HostView resumeCode={resumeCode} onExit={exit} />}
+      {screen === "host" && <HostView name={name.trim()} onExit={exit} />}
+      {screen === "resume" && <HostView name={name.trim() || "Host"} resumeCode={resumeCode} onExit={exit} />}
       {screen === "player" && <PlayerView code={joinCode} name={name.trim()} onExit={exit} />}
       {screen === "bigscreen" && <BigScreenView code={joinCode} onExit={exit} />}
     </div>
