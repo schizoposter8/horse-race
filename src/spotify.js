@@ -170,3 +170,31 @@ export async function playOnDevice(uri, deviceId) {
     throw new Error(e?.error?.message || `Spotify play failed (${res.status})`);
   }
 }
+
+/** The lobby theme: Red Right Hand — Nick Cave & The Bad Seeds (Let Love In, 6:10). */
+export const THEME_TRACK_URI = "spotify:track:0qHeP8zt2WWef7EWCs1ECj";
+
+/** Loop the current track (so the theme never runs out mid-lobby). */
+export async function setRepeatTrack(deviceId) {
+  try {
+    const tk = await getAccessToken();
+    await fetch(`https://api.spotify.com/v1/me/player/repeat?state=track&device_id=${deviceId}`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${tk}` },
+    });
+  } catch { /* non-critical */ }
+}
+
+/** Find a track URI by search (fallback if the hardcoded ID isn't in this region). */
+export async function findTrackUri(query) {
+  try {
+    const tk = await getAccessToken();
+    const res = await fetch(
+      `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=1`,
+      { headers: { Authorization: `Bearer ${tk}` } }
+    );
+    if (!res.ok) return null;
+    const j = await res.json();
+    return j?.tracks?.items?.[0]?.uri || null;
+  } catch { return null; }
+}
