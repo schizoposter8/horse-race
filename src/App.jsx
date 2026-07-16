@@ -3,6 +3,7 @@ import { sGet, sSet, sList, loadRoster, subscribeKey, subscribePrefix } from "./
 import {
   spotifyConfigured, spotifyHasToken, spotifyLogin, spotifyLogout, spotifyHandleRedirect,
   startSpeaker, parseSpotifyLink, playOnDevice,
+  THEME_TRACK_URI, setRepeatTrack, findTrackUri,
 } from "./spotify.js";
 
 /* ------------------------------------------------------------------ */
@@ -75,154 +76,6 @@ const sfx = (() => {
   };
 })();
 
-/* ---------------- home-screen atmosphere (synthesized, Red Right Hand vibes) ---------------- */
-/* Plays on the home screen and through the lobby/betting on the host + big screen,
-   fading out the moment the race starts. Player phones stay quiet (one speaker is enough). */
-
-const rrh = (() => {
-  let screen = "home";
-  let phase = null;
-  let playing = false;
-  let stop = null;
-  let muted = false;
-  let noiseBuf = null;
-
-  const ctx = () => sfx.unlock();
-  const wants = () => !muted && (screen === "home" || phase === "lobby" || phase === "betting");
-
-  function noise(c) {
-    if (!noiseBuf) {
-      noiseBuf = c.createBuffer(1, Math.floor(c.sampleRate * 0.1), c.sampleRate);
-      const d = noiseBuf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    }
-    return noiseBuf;
-  }
-
-  function start() {
-    const c = ctx();
-    if (!c || c.state !== "running" || playing) return;
-    playing = true;
-    const master = c.createGain();
-    master.gain.setValueAtTime(0.0001, c.currentTime);
-    master.gain.linearRampToValueAtTime(1, c.currentTime + 1.6);
-    master.connect(c.destination);
-
-    const spb = 60 / 54; // ~54 bpm, slow and ominous
-    const barLen = 4 * spb;
-    let bar = 0;
-    let next = c.currentTime + 0.1;
-
-    const tone = (f, t, d, type, g, dest, attack = 0.01) => {
-      const o = c.createOscillator();
-      const gn = c.createGain();
-      o.type = type;
-      o.frequency.setValueAtTime(f, t);
-      gn.gain.setValueAtTime(0.0001, t);
-      gn.gain.linearRampToValueAtTime(g, t + attack);
-      gn.gain.exponentialRampToValueAtTime(0.0001, t + d);
-      o.connect(gn);
-      gn.connect(dest || master);
-      o.start(t);
-      o.stop(t + d + 0.05);
-    };
-
-    const scheduleBar = (t) => {
-      for (let b = 0; b < 4; b++) {
-        const bt = t + b * spb;
-        // bass throb
-        tone(61.74, bt, 0.7, "triangle", 0.1);
-        // distant kick: fast pitch drop
-        const k = c.createOscillator();
-        const kg = c.createGain();
-        k.type = "sine";
-        k.frequency.setValueAtTime(110, bt);
-        k.frequency.exponentialRampToValueAtTime(38, bt + 0.18);
-        kg.gain.setValueAtTime(0.14, bt);
-        kg.gain.exponentialRampToValueAtTime(0.0001, bt + 0.3);
-        k.connect(kg); kg.connect(master);
-        k.start(bt); k.stop(bt + 0.35);
-        // offbeat shaker
-        const sh = c.createBufferSource();
-        sh.buffer = noise(c);
-        const hp = c.createBiquadFilter();
-        hp.type = "highpass";
-        hp.frequency.value = 5200;
-        const shg = c.createGain();
-        shg.gain.setValueAtTime(0.028, bt + spb / 2);
-        shg.gain.exponentialRampToValueAtTime(0.0001, bt + spb / 2 + 0.07);
-        sh.connect(hp); hp.connect(shg); shg.connect(master);
-        sh.start(bt + spb / 2); sh.stop(bt + spb / 2 + 0.09);
-      }
-      // dark organ chord (B minor) swelling through a lowpass
-      const lp = c.createBiquadFilter();
-      lp.type = "lowpass";
-      lp.frequency.value = 420;
-      lp.connect(master);
-      [123.47, 146.83, 185.0].forEach((f) => tone(f, t, barLen * 0.98, "sawtooth", 0.028, lp, 0.6));
-      // eerie high drone with slow vibrato
-      const dr = c.createOscillator();
-      const drg = c.createGain();
-      const lfo = c.createOscillator();
-      const lfog = c.createGain();
-      dr.type = "sine";
-      dr.frequency.setValueAtTime(739.99, t);
-      lfo.frequency.setValueAtTime(4.5, t);
-      lfog.gain.setValueAtTime(6, t);
-      lfo.connect(lfog); lfog.connect(dr.frequency);
-      drg.gain.setValueAtTime(0.0001, t);
-      drg.gain.linearRampToValueAtTime(0.013, t + 1);
-      drg.gain.exponentialRampToValueAtTime(0.0001, t + barLen);
-      dr.connect(drg); drg.connect(master);
-      dr.start(t); dr.stop(t + barLen + 0.1);
-      lfo.start(t); lfo.stop(t + barLen + 0.1);
-      // the descending riff, every other bar: D → C# → B
-      if (bar % 2 === 1) {
-        [[293.66, 2.0], [277.18, 2.75], [246.94, 3.5]].forEach(([f, b]) =>
-          tone(f, t + b * spb, 0.65, "sawtooth", 0.045, master, 0.02));
-      }
-      // the bell toll, every fourth bar
-      if (bar % 4 === 0) {
-        [[246.94, 3.2, 0.06], [493.88, 2.6, 0.028], [739.99, 2.0, 0.013], [1244.51, 1.5, 0.007]].forEach(([f, d, g]) =>
-          tone(f, t, d, "sine", g, master, 0.005));
-      }
-      bar += 1;
-      return barLen;
-    };
-
-    while (next < c.currentTime + 0.6) next += scheduleBar(next);
-    const iv = setInterval(() => {
-      while (next < c.currentTime + 0.6) next += scheduleBar(next);
-    }, 200);
-
-    stop = () => {
-      clearInterval(iv);
-      master.gain.setTargetAtTime(0.0001, c.currentTime, 0.5);
-      setTimeout(() => { try { master.disconnect(); } catch { /* fine */ } }, 2600);
-    };
-  }
-
-  function update() {
-    if (wants() && !playing) start();
-    else if (!wants() && playing) {
-      playing = false;
-      if (stop) { stop(); stop = null; }
-    }
-  }
-
-  return {
-    setScreen(s) { screen = s; update(); },
-    setPhase(p) { phase = p; update(); },
-    setMuted(v) { muted = v; update(); },
-    poke() {
-      const c = ctx();
-      if (!c) return;
-      if (c.state === "running") update();
-      else c.resume().then(update).catch(() => {});
-    },
-  };
-})();
-
 /**
  * Watches room state and fires draw / flip / everyone-drinks / result sounds.
  * myWin: true → win fanfare at results, false → sad trombone,
@@ -263,7 +116,7 @@ function SoundToggle() {
   return (
     <button
       aria-label={on ? "Mute sound" : "Unmute sound"}
-      onClick={() => { sfx.setEnabled(!on); rrh.setMuted(on); setOn(!on); }}
+      onClick={() => { sfx.setEnabled(!on); setOn(!on); }}
       style={{
         position: "fixed", top: 10, right: 10, zIndex: 50,
         width: 42, height: 42, borderRadius: "50%",
@@ -841,30 +694,93 @@ function SpotifyPanel({ room, returnState, showSetupHint = false }) {
   const [deviceId, setDeviceId] = useState(null);
   const [starting, setStarting] = useState(false);
   const [link, setLink] = useState("");
-  const [playing, setPlaying] = useState(false);
+  const [customPlaying, setCustomPlaying] = useState(false);
+  const [themeOn, setThemeOn] = useState(false);
   const [msg, setMsg] = useState("");
   const playerRef = useRef(null);
+  const theme = useRef({ started: false, fade: null });
 
-  // auto-duck the music during the 3-2-1 countdown, restore after the gallop
+  const fadeTo = (target, ms, done) => {
+    const p = playerRef.current;
+    if (!p) return;
+    if (theme.current.fade) clearInterval(theme.current.fade);
+    const steps = Math.max(1, Math.round(ms / 120));
+    let step = 0;
+    p.getVolume().then((from) => {
+      theme.current.fade = setInterval(() => {
+        step += 1;
+        const v = from + (target - from) * (step / steps);
+        p.setVolume(Math.max(0, Math.min(1, v))).catch(() => {});
+        if (step >= steps) {
+          clearInterval(theme.current.fade);
+          theme.current.fade = null;
+          if (done) done();
+        }
+      }, 120);
+    }).catch(() => {});
+  };
+
+  // ---- theme conductor: Red Right Hand through lobby + betting, out for the race ----
   useEffect(() => {
     const p = playerRef.current;
-    if (!p || !playing || !room) return;
+    if (!p || !deviceId || customPlaying) return;
+    const phase = room?.phase || "lobby";
+    if (phase === "lobby" || phase === "betting") {
+      if (!theme.current.started) {
+        theme.current.started = true;
+        (async () => {
+          try {
+            await p.setVolume(0);
+            try {
+              await playOnDevice(THEME_TRACK_URI, deviceId);
+            } catch {
+              // regional catalog fallback: find it by search
+              const uri = await findTrackUri("Red Right Hand Nick Cave & The Bad Seeds Let Love In");
+              if (!uri) throw new Error("Couldn't find Red Right Hand on Spotify.");
+              await playOnDevice(uri, deviceId);
+            }
+            await setRepeatTrack(deviceId);
+            setThemeOn(true);
+            setMsg("");
+            fadeTo(0.6, 1800);
+          } catch (e) {
+            theme.current.started = false;
+            setMsg(String(e.message || e));
+          }
+        })();
+      } else {
+        // back from a race: resume where it left off and fade in
+        p.resume().catch(() => {});
+        setThemeOn(true);
+        fadeTo(0.6, 1500);
+      }
+    } else if (theme.current.started) {
+      // race (and results): fade out, then pause
+      setThemeOn(false);
+      fadeTo(0, 1300, () => { playerRef.current?.pause().catch(() => {}); });
+    }
+  }, [room?.phase, deviceId, customPlaying]);
+
+  // if the host plays their own playlist instead, duck it during the countdown
+  useEffect(() => {
+    const p = playerRef.current;
+    if (!p || !customPlaying || !room) return;
     if (room.round?.pendingAt) p.setVolume(0.12).catch(() => {});
-  }, [room?.round?.pendingAt, playing, room]);
+  }, [room?.round?.pendingAt, customPlaying, room]);
   useEffect(() => {
     const p = playerRef.current;
-    if (!p || !playing || !room) return;
+    if (!p || !customPlaying || !room) return;
     if (!room.round?.pendingAt && room.round?.drawIdx > 0) {
       const t = setTimeout(() => p.setVolume(0.6).catch(() => {}), 2600);
       return () => clearTimeout(t);
     }
-  }, [room?.round?.drawIdx, room?.round?.pendingAt, playing, room]);
+  }, [room?.round?.drawIdx, room?.round?.pendingAt, customPlaying, room]);
 
   if (!spotifyConfigured()) {
     if (!showSetupHint) return null;
     return (
       <div style={{ marginTop: 16, textAlign: "center", color: C.chalkDim, fontSize: 12 }}>
-        🎧 Spotify available — add VITE_SPOTIFY_CLIENT_ID to enable (see setup notes).
+        🎧 Lobby theme available — add VITE_SPOTIFY_CLIENT_ID to enable (see setup notes).
       </div>
     );
   }
@@ -890,16 +806,24 @@ function SpotifyPanel({ room, returnState, showSetupHint = false }) {
     }
   };
 
-  const play = async () => {
+  const playCustom = async () => {
     const uri = parseSpotifyLink(link);
     if (!uri) { setMsg("Paste a Spotify playlist, album, or track link."); return; }
     setMsg("");
     try {
+      if (theme.current.fade) { clearInterval(theme.current.fade); theme.current.fade = null; }
       await playOnDevice(uri, deviceId);
-      setPlaying(true);
+      await playerRef.current?.setVolume(0.6);
+      setCustomPlaying(true);
+      setThemeOn(false);
     } catch (e) {
       setMsg(String(e.message || e));
     }
+  };
+
+  const backToTheme = () => {
+    theme.current.started = false;
+    setCustomPlaying(false); // the conductor effect restarts the theme
   };
 
   return (
@@ -911,10 +835,15 @@ function SpotifyPanel({ room, returnState, showSetupHint = false }) {
         </span>
       </div>
       {!connected && (
-        <button className="hr-btn" style={{ background: "#1DB954", color: "#0A2010", fontSize: 15 }}
-          onClick={() => spotifyLogin(returnState)}>
-          Connect Spotify
-        </button>
+        <>
+          <button className="hr-btn" style={{ background: "#1DB954", color: "#0A2010", fontSize: 15 }}
+            onClick={() => spotifyLogin(returnState)}>
+            Connect Spotify
+          </button>
+          <div style={{ color: C.chalkDim, fontSize: 12, marginTop: 6, textAlign: "center" }}>
+            Red Right Hand plays through the lobby, fades when the race starts.
+          </div>
+        </>
       )}
       {connected && !deviceId && (
         <>
@@ -923,16 +852,19 @@ function SpotifyPanel({ room, returnState, showSetupHint = false }) {
             {starting ? "Starting…" : "Use this device as the speaker"}
           </button>
           <div style={{ color: C.chalkDim, fontSize: 12, marginTop: 6, textAlign: "center" }}>
-            Needs Spotify Premium. Do this on whichever device is hooked to the sound.
+            Needs Spotify Premium. Do this on whichever device is hooked to the sound — the theme starts on its own.
           </div>
         </>
       )}
       {connected && deviceId && (
         <>
+          <div style={{ textAlign: "center", fontSize: 14, marginBottom: 10, color: themeOn ? C.tote : C.chalkDim }}>
+            {customPlaying ? "Playing your playlist" : themeOn ? "🎵 Red Right Hand — lobby theme" : "Theme paused for the race"}
+          </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <input className="hr-input" placeholder="Paste a playlist link" value={link}
+            <input className="hr-input" placeholder="Or paste your own playlist" value={link}
               onChange={(e) => setLink(e.target.value)} style={{ fontSize: 14, padding: 10, flex: 1 }} />
-            <button className="hr-btn" style={{ width: 90, background: "#1DB954", color: "#0A2010", fontSize: 15 }} onClick={play}>
+            <button className="hr-btn" style={{ width: 90, background: "#1DB954", color: "#0A2010", fontSize: 15 }} onClick={playCustom}>
               Play
             </button>
           </div>
@@ -941,13 +873,18 @@ function SpotifyPanel({ room, returnState, showSetupHint = false }) {
               onClick={() => { playerRef.current?.togglePlay(); }}>
               Play / pause
             </button>
-            <span style={{ color: C.chalkDim, fontSize: 12 }}>Auto-ducks during the countdown</span>
+            {customPlaying && (
+              <button className="hr-btn" style={{ width: 130, padding: "8px 0", background: C.turfDeep, color: C.chalk, border: `1px solid ${C.rail}`, fontSize: 13 }}
+                onClick={backToTheme}>
+                Back to theme
+              </button>
+            )}
           </div>
         </>
       )}
       {connected && (
         <button className="hr-btn" style={{ background: "transparent", color: C.chalkDim, fontSize: 12, marginTop: 4 }}
-          onClick={() => { spotifyLogout(); setConnected(false); setDeviceId(null); setPlaying(false); playerRef.current?.disconnect(); playerRef.current = null; }}>
+          onClick={() => { spotifyLogout(); setConnected(false); setDeviceId(null); setCustomPlaying(false); setThemeOn(false); theme.current.started = false; playerRef.current?.disconnect(); playerRef.current = null; }}>
           Disconnect
         </button>
       )}
@@ -971,12 +908,6 @@ function HostView({ name, resumeCode, onExit }) {
 
   // the host rides too: registered as a player, can bet and win like anyone
   const rider = useRider(code, name, room);
-
-  // lobby/betting atmosphere; fades out when the race starts
-  useEffect(() => {
-    rrh.setPhase(room?.phase || null);
-    return () => rrh.setPhase(null);
-  }, [room?.phase]);
   const myWin = room?.phase === "results" ? (rider.betPlaced ? rider.suit === room.round.winner : "spect") : "spect";
   useRaceSfx(room, myWin);
 
@@ -1237,12 +1168,6 @@ function BigScreenView({ code, onExit }) {
   const [gone, setGone] = useState(false);
 
   useRaceSfx(room);
-
-  // lobby/betting atmosphere; fades out when the race starts
-  useEffect(() => {
-    rrh.setPhase(room?.phase || null);
-    return () => rrh.setPhase(null);
-  }, [room?.phase]);
 
   // poll room
   useEffect(() => {
@@ -1532,13 +1457,10 @@ export default function App() {
 
   // unlock audio on the first tap anywhere (browser autoplay policy)
   useEffect(() => {
-    const h = () => { sfx.unlock(); rrh.poke(); };
+    const h = () => { sfx.unlock(); };
     window.addEventListener("pointerdown", h, { once: true });
     return () => window.removeEventListener("pointerdown", h);
   }, []);
-
-  // the atmosphere follows which screen we're on
-  useEffect(() => { rrh.setScreen(screen); }, [screen]);
 
   // returning from Spotify authorization: restore where the user was
   useEffect(() => {
