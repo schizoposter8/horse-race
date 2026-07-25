@@ -247,16 +247,29 @@ function Styles() {
       .hr-lightR{left:62%;background:radial-gradient(closest-side,rgba(255,201,113,.55),transparent 70%)}
       .hr-turfband{position:absolute;left:0;right:0;bottom:31%;height:9%;background:linear-gradient(180deg,#1F5E3B,#0D3A22);opacity:.7}
       .hr-dirtband{position:absolute;left:0;right:0;bottom:0;height:34%;background:linear-gradient(180deg,#79501F 0%,#4C3015 55%,#241605 100%)}
-      .hr-heroHorse{position:absolute;max-width:190px;transform:translateX(-50%);filter:drop-shadow(0 12px 18px rgba(0,0,0,.6));animation:hgallop .62s ease-in-out infinite}
-      @media(min-width:900px){ .hr-heroHorse{max-width:300px} }
+      .hr-heroHorse{position:absolute;transform:translateX(-50%);filter:drop-shadow(0 12px 18px rgba(0,0,0,.6));animation:hgallop .62s ease-in-out infinite}
+      /* mobile: evenly spread across the top band, all one size */
+      .hr-scene img{width:25%;max-width:145px}
+      .hr-scene img:nth-of-type(1){left:13%;bottom:15%}
+      .hr-scene img:nth-of-type(2){left:38%;bottom:7%}
+      .hr-scene img:nth-of-type(3){left:63%;bottom:15%}
+      .hr-scene img:nth-of-type(4){left:88%;bottom:7%}
+      /* desktop: the field centred on screen, staggered for depth */
+      @media(min-width:900px){
+        .hr-scene img{max-width:320px}
+        .hr-scene img:nth-of-type(1){left:26%;width:22%;bottom:16%}
+        .hr-scene img:nth-of-type(2){left:42%;width:25%;bottom:8%}
+        .hr-scene img:nth-of-type(3){left:58%;width:23%;bottom:18%}
+        .hr-scene img:nth-of-type(4){left:74%;width:21%;bottom:7%}
+      }
       .hr-speck{position:absolute;width:7px;height:11px;border-radius:2px;opacity:.8;animation:hfloat 3.4s ease-in-out infinite}
       .hr-scrim{position:absolute;left:0;right:0;top:0;height:236px;background:linear-gradient(180deg,rgba(20,13,6,.05) 0%,rgba(20,13,6,.5) 58%,#170F07 100%)}
-      @media(min-width:900px){ .hr-scrim{height:100%;background:linear-gradient(96deg,rgba(20,13,6,.97) 0%,rgba(20,13,6,.93) 30%,rgba(20,13,6,.5) 54%,rgba(20,13,6,0) 80%)} }
-      .hr-content{position:relative;flex:1;margin-top:196px;padding:4px 18px 28px}
-      @media(min-width:900px){ .hr-content{margin-top:0;width:520px;padding:6vh 48px 4vh} }
+      @media(min-width:900px){ .hr-scrim{height:100%;background:linear-gradient(180deg,rgba(20,13,6,.4) 0%,rgba(20,13,6,.82) 28%,rgba(20,13,6,.74) 54%,rgba(20,13,6,.24) 78%,rgba(20,13,6,0) 100%)} }
+      .hr-content{position:relative;flex:1;margin:196px auto 0;max-width:460px;padding:4px 18px 28px;text-align:center}
+      @media(min-width:900px){ .hr-content{margin:0 auto;max-width:520px;padding:7vh 24px 4vh} }
       .hr-goldtext{background:linear-gradient(180deg,#FCF1C6 0%,#EFC44F 46%,#A9741F 100%);-webkit-background-clip:text;background-clip:text;color:#EFC44F;-webkit-text-fill-color:transparent}
-      .hr-mark{font-size:13px;letter-spacing:.3em;text-transform:uppercase;font-weight:800;color:#EFC44F}
-      .hr-mark small{display:block;font-size:8px;letter-spacing:.18em;color:rgba(245,235,210,.45);margin-top:3px;font-weight:600}
+      .hr-mark{font-size:17px;letter-spacing:.26em;text-transform:uppercase;font-weight:800;color:#EFC44F}
+      .hr-mark small{display:block;font-size:11px;letter-spacing:.16em;color:rgba(245,235,210,.45);margin-top:3px;font-weight:600}
       .hr-h1{font-size:clamp(42px,8.5vw,72px);line-height:.9;margin:10px 0 12px}
       .hr-sub{margin:0 0 20px;font-size:16px;line-height:1.5;color:#F1E6CD}
       .hr-sub span{color:#FF57B4}
@@ -278,7 +291,7 @@ function Styles() {
       .hr-resume{display:flex;justify-content:center;margin-top:14px}
       .hr-linkbtn{flex-shrink:0;background:none;border:none;color:rgba(241,228,196,.6);font-family:inherit;font-size:13px;cursor:pointer;padding:8px 4px}
       .hr-linkbtn:disabled{opacity:.35;cursor:default}
-      .hr-strip{position:relative;margin-top:auto;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:center;text-align:center;padding:13px 18px;border-top:1px solid rgba(239,196,79,.18);background:linear-gradient(90deg,rgba(239,196,79,.14),rgba(239,196,79,.02));font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:#E3D3AB}
+      .hr-strip{position:relative;margin-top:auto;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:center;text-align:center;padding:13px 18px;border-top:1px solid rgba(239,196,79,.18);background:linear-gradient(90deg,rgba(239,196,79,.14),rgba(239,196,79,.02));font-size:14px;letter-spacing:.07em;text-transform:uppercase;color:#E3D3AB}
       .hr-strip b{color:#EFC44F}
       .hr-striplead{color:#EFC44F;font-weight:800;letter-spacing:.12em}
       .hr-foot{text-align:center;font-size:12px;color:rgba(241,228,196,.4);margin:18px 0 0;letter-spacing:.06em}
@@ -321,11 +334,12 @@ const HORSE_IMGS = {
 const HORSE_SCALE = { S: 1, H: 1, D: 1, C: 1.18 };
 
 // landing-page hero: the field breaking from the gate (deterministic, no re-randomising)
+// order sets the lane; size and position live in CSS so they can differ per screen
 const HERO_FIELD = [
-  { s: "C", left: "50%", w: "34%", bottom: "16%", delay: "0s" },
-  { s: "S", left: "63%", w: "38%", bottom: "9%", delay: ".08s" },
-  { s: "D", left: "77%", w: "35%", bottom: "18%", delay: ".16s" },
-  { s: "H", left: "89%", w: "31%", bottom: "7%", delay: ".24s" },
+  { s: "C", delay: "0s" },
+  { s: "S", delay: ".08s" },
+  { s: "D", delay: ".16s" },
+  { s: "H", delay: ".24s" },
 ];
 const CONFETTI = Array.from({ length: 14 }, (_, i) => ({
   left: (i * 7.3 + 4) % 95,
@@ -1551,7 +1565,7 @@ export default function App() {
               <div className="hr-dirtband" />
               {HERO_FIELD.map((h) => (
                 <img key={h.s} className="hr-heroHorse" src={HORSE_IMGS[h.s]} alt=""
-                  style={{ left: h.left, width: h.w, bottom: h.bottom, animationDelay: h.delay }} />
+                  style={{ animationDelay: h.delay }} />
               ))}
               {CONFETTI.map((c, i) => (
                 <span key={i} className="hr-speck" style={{
