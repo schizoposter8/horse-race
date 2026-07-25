@@ -238,9 +238,8 @@ function Styles() {
       /* ---- landing page (gate-burst hero) ---- */
       @keyframes hgallop { 0%,100%{transform:translateX(-50%) translateY(0) rotate(-.8deg)} 50%{transform:translateX(-50%) translateY(-10px) rotate(1deg)} }
       @keyframes hfloat { 0%,100%{transform:translateY(0) rotate(var(--r,0deg))} 50%{transform:translateY(-7px) rotate(calc(var(--r,0deg) + 12deg))} }
-      .hr-homewrap{min-height:100vh;box-sizing:border-box;padding:16px 12px 36px;background:radial-gradient(1100px 480px at 68% 4%, #3B2513 0%, #22150A 46%, #140D06 100%)}
-      .hr-hero{position:relative;overflow:hidden;max-width:1120px;margin:0 auto;border-radius:22px;border:1px solid rgba(239,196,79,.22);background:linear-gradient(180deg,#241708 0%,#160E06 60%);box-shadow:0 24px 60px rgba(0,0,0,.55)}
-      @media(min-width:900px){ .hr-hero{min-height:600px} }
+      .hr-homewrap{min-height:100vh;box-sizing:border-box;background:radial-gradient(1100px 480px at 68% 4%, #3B2513 0%, #22150A 46%, #140D06 100%)}
+      .hr-hero{position:relative;overflow:hidden;min-height:100vh;display:flex;flex-direction:column;background:linear-gradient(180deg,#241708 0%,#160E06 60%)}
       .hr-scene{position:absolute;left:0;right:0;top:0;height:236px;overflow:hidden;pointer-events:none}
       @media(min-width:900px){ .hr-scene{height:100%} }
       .hr-lightL,.hr-lightR{position:absolute;top:-24%;height:78%;width:48%;filter:blur(30px)}
@@ -253,8 +252,8 @@ function Styles() {
       .hr-speck{position:absolute;width:7px;height:11px;border-radius:2px;opacity:.8;animation:hfloat 3.4s ease-in-out infinite}
       .hr-scrim{position:absolute;left:0;right:0;top:0;height:236px;background:linear-gradient(180deg,rgba(20,13,6,.05) 0%,rgba(20,13,6,.5) 58%,#170F07 100%)}
       @media(min-width:900px){ .hr-scrim{height:100%;background:linear-gradient(96deg,rgba(20,13,6,.97) 0%,rgba(20,13,6,.93) 30%,rgba(20,13,6,.5) 54%,rgba(20,13,6,0) 80%)} }
-      .hr-content{position:relative;margin-top:196px;padding:4px 18px 24px}
-      @media(min-width:900px){ .hr-content{margin-top:0;width:470px;padding:34px 34px 30px} }
+      .hr-content{position:relative;flex:1;margin-top:196px;padding:4px 18px 28px}
+      @media(min-width:900px){ .hr-content{margin-top:0;width:520px;padding:6vh 48px 4vh} }
       .hr-goldtext{background:linear-gradient(180deg,#FCF1C6 0%,#EFC44F 46%,#A9741F 100%);-webkit-background-clip:text;background-clip:text;color:#EFC44F;-webkit-text-fill-color:transparent}
       .hr-mark{font-size:13px;letter-spacing:.3em;text-transform:uppercase;font-weight:800;color:#EFC44F}
       .hr-mark small{display:block;font-size:8px;letter-spacing:.18em;color:rgba(245,235,210,.45);margin-top:3px;font-weight:600}
@@ -276,10 +275,10 @@ function Styles() {
       .hr-pill input{width:100%;box-sizing:border-box;border:none;background:transparent;text-align:center;font-family:Haettenschweiler,'Arial Narrow','Franklin Gothic Medium',Impact,sans-serif;font-size:32px;letter-spacing:.26em;color:#241505;text-transform:uppercase;padding:0;outline:none}
       .hr-pill input::placeholder{color:rgba(36,21,5,.32);letter-spacing:.18em}
       .hr-note{text-align:center;font-size:12px;color:rgba(241,228,196,.55);margin:8px 0 4px}
-      .hr-resume{display:flex;gap:8px;align-items:center;margin-top:18px}
+      .hr-resume{display:flex;justify-content:center;margin-top:14px}
       .hr-linkbtn{flex-shrink:0;background:none;border:none;color:rgba(241,228,196,.6);font-family:inherit;font-size:13px;cursor:pointer;padding:8px 4px}
       .hr-linkbtn:disabled{opacity:.35;cursor:default}
-      .hr-strip{position:relative;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:11px 18px;border-top:1px solid rgba(239,196,79,.18);background:linear-gradient(90deg,rgba(239,196,79,.14),rgba(239,196,79,.02));font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:#E3D3AB}
+      .hr-strip{position:relative;margin-top:auto;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:center;text-align:center;padding:13px 18px;border-top:1px solid rgba(239,196,79,.18);background:linear-gradient(90deg,rgba(239,196,79,.14),rgba(239,196,79,.02));font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:#E3D3AB}
       .hr-strip b{color:#EFC44F}
       .hr-striplead{color:#EFC44F;font-weight:800;letter-spacing:.12em}
       .hr-foot{text-align:center;font-size:12px;color:rgba(241,228,196,.4);margin:18px 0 0;letter-spacing:.06em}
@@ -1566,12 +1565,6 @@ export default function App() {
             <div className="hr-content">
               <div className="hr-mark">Horse Race<small>Bet in sips. Blame the deck.</small></div>
               <h1 className="hr-display hr-goldtext hr-h1">Race the room</h1>
-              <p className="hr-sub">
-                Join with your phone.<br />
-                <span>No app download. No sign up.</span><br />
-                <span>Just join and play.</span>
-              </p>
-
               <input className="hr-field" placeholder="Your name" value={name} maxLength={16}
                 onChange={(e) => setName(e.target.value)} style={{ marginBottom: 10 }} />
               <button className="hr-cta hr-cta-mag" disabled={!name.trim()} onClick={() => setScreen("host")}>
@@ -1581,7 +1574,7 @@ export default function App() {
 
               <div className="hr-pill">
                 <label htmlFor="hr-code">Room code</label>
-                <input id="hr-code" placeholder="BARN" value={joinCode} maxLength={4} inputMode="text"
+                <input id="hr-code" placeholder="CODE" value={joinCode} maxLength={4} inputMode="text"
                   autoComplete="off" autoCapitalize="characters"
                   onChange={(e) => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))} />
               </div>
@@ -1595,25 +1588,17 @@ export default function App() {
               </button>
 
               <div className="hr-resume">
-                <input className="hr-field" placeholder="Resume hosting" value={resumeCode} maxLength={4}
-                  onChange={(e) => setResumeCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))}
-                  style={{ fontSize: 14, padding: "10px 16px", textAlign: "center", letterSpacing: ".18em", textTransform: "uppercase" }} />
-                <button className="hr-linkbtn" disabled={resumeCode.length !== 4} onClick={() => setScreen("resume")}>
-                  Resume as host →
+                <button className="hr-linkbtn" disabled={joinCode.length !== 4}
+                  onClick={() => { setResumeCode(joinCode); setScreen("resume"); }}>
+                  Resume hosting this code →
                 </button>
               </div>
             </div>
 
             <div className="hr-strip">
-              <span className="hr-striplead">🐎 How it works</span>
-              <span>Bet sips on a <b>suit</b></span>
-              <span style={{ opacity: .4 }}>·</span>
-              <span>Host <b>deals</b> the cards</span>
-              <span style={{ opacity: .4 }}>·</span>
-              <span>Winners <b>hand out</b> the damage</span>
+              <span>Hold your horses — Please drink responsibly.</span>
             </div>
           </div>
-          <p className="hr-foot">Hold your horses — Please drink responsibly.</p>
         </div>
       )}
       {screen === "host" && <HostView name={name.trim()} onExit={exit} />}
