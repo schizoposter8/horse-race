@@ -235,6 +235,54 @@ function Styles() {
       .hr-input::placeholder{color:${C.chalkDim}}
       .hr-chip{animation:slidein .25s ease}
       .hr-shout{animation:shout .5s ease-in-out infinite}
+      /* ---- landing page (gate-burst hero) ---- */
+      @keyframes hgallop { 0%,100%{transform:translateX(-50%) translateY(0) rotate(-.8deg)} 50%{transform:translateX(-50%) translateY(-10px) rotate(1deg)} }
+      @keyframes hfloat { 0%,100%{transform:translateY(0) rotate(var(--r,0deg))} 50%{transform:translateY(-7px) rotate(calc(var(--r,0deg) + 12deg))} }
+      .hr-homewrap{min-height:100vh;box-sizing:border-box;padding:16px 12px 36px;background:radial-gradient(1100px 480px at 68% 4%, #3B2513 0%, #22150A 46%, #140D06 100%)}
+      .hr-hero{position:relative;overflow:hidden;max-width:1120px;margin:0 auto;border-radius:22px;border:1px solid rgba(239,196,79,.22);background:linear-gradient(180deg,#241708 0%,#160E06 60%);box-shadow:0 24px 60px rgba(0,0,0,.55)}
+      @media(min-width:900px){ .hr-hero{min-height:600px} }
+      .hr-scene{position:absolute;left:0;right:0;top:0;height:236px;overflow:hidden;pointer-events:none}
+      @media(min-width:900px){ .hr-scene{height:100%} }
+      .hr-lightL,.hr-lightR{position:absolute;top:-24%;height:78%;width:48%;filter:blur(30px)}
+      .hr-lightL{left:30%;background:radial-gradient(closest-side,rgba(255,226,163,.7),transparent 70%)}
+      .hr-lightR{left:62%;background:radial-gradient(closest-side,rgba(255,201,113,.55),transparent 70%)}
+      .hr-turfband{position:absolute;left:0;right:0;bottom:31%;height:9%;background:linear-gradient(180deg,#1F5E3B,#0D3A22);opacity:.7}
+      .hr-dirtband{position:absolute;left:0;right:0;bottom:0;height:34%;background:linear-gradient(180deg,#79501F 0%,#4C3015 55%,#241605 100%)}
+      .hr-heroHorse{position:absolute;max-width:190px;transform:translateX(-50%);filter:drop-shadow(0 12px 18px rgba(0,0,0,.6));animation:hgallop .62s ease-in-out infinite}
+      @media(min-width:900px){ .hr-heroHorse{max-width:300px} }
+      .hr-speck{position:absolute;width:7px;height:11px;border-radius:2px;opacity:.8;animation:hfloat 3.4s ease-in-out infinite}
+      .hr-scrim{position:absolute;left:0;right:0;top:0;height:236px;background:linear-gradient(180deg,rgba(20,13,6,.05) 0%,rgba(20,13,6,.5) 58%,#170F07 100%)}
+      @media(min-width:900px){ .hr-scrim{height:100%;background:linear-gradient(96deg,rgba(20,13,6,.97) 0%,rgba(20,13,6,.93) 30%,rgba(20,13,6,.5) 54%,rgba(20,13,6,0) 80%)} }
+      .hr-content{position:relative;margin-top:196px;padding:4px 18px 24px}
+      @media(min-width:900px){ .hr-content{margin-top:0;width:470px;padding:34px 34px 30px} }
+      .hr-goldtext{background:linear-gradient(180deg,#FCF1C6 0%,#EFC44F 46%,#A9741F 100%);-webkit-background-clip:text;background-clip:text;color:#EFC44F;-webkit-text-fill-color:transparent}
+      .hr-mark{font-size:13px;letter-spacing:.3em;text-transform:uppercase;font-weight:800;color:#EFC44F}
+      .hr-mark small{display:block;font-size:8px;letter-spacing:.18em;color:rgba(245,235,210,.45);margin-top:3px;font-weight:600}
+      .hr-h1{font-size:clamp(42px,8.5vw,72px);line-height:.9;margin:10px 0 12px}
+      .hr-sub{margin:0 0 20px;font-size:16px;line-height:1.5;color:#F1E6CD}
+      .hr-sub span{color:#FF57B4}
+      .hr-field{width:100%;box-sizing:border-box;border-radius:999px;border:1.5px solid rgba(239,196,79,.35);background:rgba(255,255,255,.05);color:#F5EBD2;padding:14px 18px;font-size:17px;font-family:inherit}
+      .hr-field:focus{outline:none;border-color:#EFC44F;background:rgba(255,255,255,.08)}
+      .hr-field::placeholder{color:rgba(245,235,210,.42)}
+      .hr-cta{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;box-sizing:border-box;border-radius:999px;padding:15px 18px;font-family:inherit;font-size:18px;font-weight:800;cursor:pointer;transition:transform .08s,filter .15s}
+      .hr-cta:active{transform:scale(.98)}
+      .hr-cta:disabled{opacity:.42;cursor:default}
+      .hr-cta:focus-visible{outline:3px solid #EFC44F;outline-offset:3px}
+      .hr-cta-mag{background:linear-gradient(180deg,#FF52B2,#CE1179);color:#fff;border:1px solid rgba(255,255,255,.28);box-shadow:0 8px 24px rgba(206,17,121,.35)}
+      .hr-cta-gold{background:linear-gradient(180deg,#FCF1C6,#DFB13F);color:#2A1A06;border:1px solid rgba(255,255,255,.4);box-shadow:0 8px 22px rgba(223,177,63,.22)}
+      .hr-cta-ghost{background:rgba(255,255,255,.03);color:#F1E4C4;border:1.5px solid rgba(239,196,79,.45)}
+      .hr-pill{border-radius:999px;padding:7px 16px 9px;margin:16px 0 10px;background:linear-gradient(180deg,#FCF1C6,#D7A835);border:1px solid rgba(255,255,255,.42);box-shadow:0 8px 22px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.6)}
+      .hr-pill label{display:block;text-align:center;font-size:10px;letter-spacing:.24em;color:#6B4A0E;font-weight:800;text-transform:uppercase}
+      .hr-pill input{width:100%;box-sizing:border-box;border:none;background:transparent;text-align:center;font-family:Haettenschweiler,'Arial Narrow','Franklin Gothic Medium',Impact,sans-serif;font-size:32px;letter-spacing:.26em;color:#241505;text-transform:uppercase;padding:0;outline:none}
+      .hr-pill input::placeholder{color:rgba(36,21,5,.32);letter-spacing:.18em}
+      .hr-note{text-align:center;font-size:12px;color:rgba(241,228,196,.55);margin:8px 0 4px}
+      .hr-resume{display:flex;gap:8px;align-items:center;margin-top:18px}
+      .hr-linkbtn{flex-shrink:0;background:none;border:none;color:rgba(241,228,196,.6);font-family:inherit;font-size:13px;cursor:pointer;padding:8px 4px}
+      .hr-linkbtn:disabled{opacity:.35;cursor:default}
+      .hr-strip{position:relative;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:11px 18px;border-top:1px solid rgba(239,196,79,.18);background:linear-gradient(90deg,rgba(239,196,79,.14),rgba(239,196,79,.02));font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:#E3D3AB}
+      .hr-strip b{color:#EFC44F}
+      .hr-striplead{color:#EFC44F;font-weight:800;letter-spacing:.12em}
+      .hr-foot{text-align:center;font-size:12px;color:rgba(241,228,196,.4);margin:18px 0 0;letter-spacing:.06em}
       @media (prefers-reduced-motion: reduce){ *{animation:none !important;transition:none !important} }
     `}</style>
   );
@@ -272,6 +320,21 @@ const HORSE_IMGS = {
 
 // the Clubs photo is a wider crop, so it renders smaller in the same cell — scale it up to match
 const HORSE_SCALE = { S: 1, H: 1, D: 1, C: 1.18 };
+
+// landing-page hero: the field breaking from the gate (deterministic, no re-randomising)
+const HERO_FIELD = [
+  { s: "C", left: "50%", w: "34%", bottom: "16%", delay: "0s" },
+  { s: "S", left: "63%", w: "38%", bottom: "9%", delay: ".08s" },
+  { s: "D", left: "77%", w: "35%", bottom: "18%", delay: ".16s" },
+  { s: "H", left: "89%", w: "31%", bottom: "7%", delay: ".24s" },
+];
+const CONFETTI = Array.from({ length: 14 }, (_, i) => ({
+  left: (i * 7.3 + 4) % 95,
+  top: (i * 13.7) % 44,
+  rot: (i * 47) % 180,
+  delay: (i % 5) * 0.4,
+  color: i % 3 === 0 ? "#FF52B2" : i % 3 === 1 ? "#EFC44F" : "#FCF1C6",
+}));
 
 function Horse({ s, galloping, stumble, won }) {
   const run = galloping && !won;
@@ -1479,42 +1542,78 @@ export default function App() {
       <Styles />
       <SoundToggle />
       {screen === "home" && (
-        <div className="hr-wrap" style={{ paddingTop: 48 }}>
-          <div style={{ width: 170, height: 120, margin: "0 auto 4px" }}><Horse s="H" galloping /></div>
-          <ToteHeader sub="The card game · bet in sips" />
-          <input className="hr-input" placeholder="Your name" value={name} maxLength={16}
-            onChange={(e) => setName(e.target.value)} style={{ marginBottom: 12 }} />
-          <button className="hr-btn" style={{ background: C.tote, color: C.ink, marginBottom: 6 }}
-            disabled={!name.trim()} onClick={() => setScreen("host")}>
-            Host a race
-          </button>
-          <div style={{ color: C.chalkDim, fontSize: 12, textAlign: "center", marginBottom: 14 }}>
-            Hosts ride too — you deal the cards and bet.
+        <div className="hr-homewrap">
+          <div className="hr-hero">
+            {/* the scene: floodlights, turf, dirt, the field breaking from the gate */}
+            <div className="hr-scene" aria-hidden="true">
+              <div className="hr-lightL" />
+              <div className="hr-lightR" />
+              <div className="hr-turfband" />
+              <div className="hr-dirtband" />
+              {HERO_FIELD.map((h) => (
+                <img key={h.s} className="hr-heroHorse" src={HORSE_IMGS[h.s]} alt=""
+                  style={{ left: h.left, width: h.w, bottom: h.bottom, animationDelay: h.delay }} />
+              ))}
+              {CONFETTI.map((c, i) => (
+                <span key={i} className="hr-speck" style={{
+                  left: `${c.left}%`, top: `${c.top}%`, background: c.color,
+                  animationDelay: `${c.delay}s`, "--r": `${c.rot}deg`,
+                }} />
+              ))}
+            </div>
+            <div className="hr-scrim" aria-hidden="true" />
+
+            <div className="hr-content">
+              <div className="hr-mark">Horse Race<small>Bet in sips. Blame the deck.</small></div>
+              <h1 className="hr-display hr-goldtext hr-h1">Race the room</h1>
+              <p className="hr-sub">
+                Join with your phone.<br />
+                <span>No app download. No sign up.</span><br />
+                <span>Just join and play.</span>
+              </p>
+
+              <input className="hr-field" placeholder="Your name" value={name} maxLength={16}
+                onChange={(e) => setName(e.target.value)} style={{ marginBottom: 10 }} />
+              <button className="hr-cta hr-cta-mag" disabled={!name.trim()} onClick={() => setScreen("host")}>
+                👑 Host a party
+              </button>
+              <div className="hr-note">Hosts ride too — you deal the cards and bet.</div>
+
+              <div className="hr-pill">
+                <label htmlFor="hr-code">Room code</label>
+                <input id="hr-code" placeholder="BARN" value={joinCode} maxLength={4} inputMode="text"
+                  autoComplete="off" autoCapitalize="characters"
+                  onChange={(e) => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))} />
+              </div>
+              <button className="hr-cta hr-cta-gold" style={{ marginBottom: 9 }}
+                disabled={joinCode.length !== 4 || !name.trim()} onClick={() => setScreen("player")}>
+                👥 Join friends
+              </button>
+              <button className="hr-cta hr-cta-ghost" style={{ fontSize: 15, padding: "13px 18px" }}
+                disabled={joinCode.length !== 4} onClick={() => setScreen("bigscreen")}>
+                📺 Watch on a big screen
+              </button>
+
+              <div className="hr-resume">
+                <input className="hr-field" placeholder="Resume hosting" value={resumeCode} maxLength={4}
+                  onChange={(e) => setResumeCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))}
+                  style={{ fontSize: 14, padding: "10px 16px", textAlign: "center", letterSpacing: ".18em", textTransform: "uppercase" }} />
+                <button className="hr-linkbtn" disabled={resumeCode.length !== 4} onClick={() => setScreen("resume")}>
+                  Resume as host →
+                </button>
+              </div>
+            </div>
+
+            <div className="hr-strip">
+              <span className="hr-striplead">🐎 How it works</span>
+              <span>Bet sips on a <b>suit</b></span>
+              <span style={{ opacity: .4 }}>·</span>
+              <span>Host <b>deals</b> the cards</span>
+              <span style={{ opacity: .4 }}>·</span>
+              <span>Winners <b>hand out</b> the damage</span>
+            </div>
           </div>
-          <div style={{ borderTop: `1px dashed ${C.rail}`, margin: "6px 0 20px" }} />
-          <input className="hr-input" placeholder="Room code" value={joinCode} maxLength={4}
-            onChange={(e) => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))}
-            style={{ marginBottom: 12, textTransform: "uppercase", letterSpacing: ".2em", textAlign: "center" }} />
-          <button className="hr-btn" style={{ background: C.red, color: C.chalk, marginBottom: 8 }}
-            disabled={joinCode.length !== 4 || !name.trim()} onClick={() => setScreen("player")}>
-            Join the race
-          </button>
-          <button className="hr-btn" style={{ background: C.turf, color: C.chalk, border: `2px solid ${C.rail}`, fontSize: 15 }}
-            disabled={joinCode.length !== 4} onClick={() => setScreen("bigscreen")}>
-            📺 Watch on a big screen
-          </button>
-          <div style={{ textAlign: "center", marginTop: 26 }}>
-            <input className="hr-input" placeholder="Resume hosting (code)" value={resumeCode} maxLength={4}
-              onChange={(e) => setResumeCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))}
-              style={{ maxWidth: 220, display: "inline-block", textAlign: "center", fontSize: 14, padding: 10 }} />
-            <button className="hr-btn" style={{ background: "transparent", color: C.chalkDim, fontSize: 14 }}
-              disabled={resumeCode.length !== 4} onClick={() => setScreen("resume")}>
-              Resume as host →
-            </button>
-          </div>
-          <p style={{ color: C.chalkDim, fontSize: 12, textAlign: "center", marginTop: 30, lineHeight: 1.5 }}>
-            Hold your horses — Please drink responsibly.
-          </p>
+          <p className="hr-foot">Hold your horses — Please drink responsibly.</p>
         </div>
       )}
       {screen === "host" && <HostView name={name.trim()} onExit={exit} />}
