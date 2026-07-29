@@ -248,10 +248,6 @@ function Styles() {
       .hr-rail{position:absolute;left:0;right:0;bottom:48%;height:4%;background:repeating-linear-gradient(90deg,#fff 0 5px,transparent 5px 52px);border-top:5px solid #fff;border-bottom:4px solid #f4f8fb}
       .hr-turfband{position:absolute;left:0;right:0;bottom:38%;height:10%;background:linear-gradient(180deg,#5CB065,#2F7C46)}
       .hr-dirtband{position:absolute;left:0;right:0;bottom:0;height:38%;background:linear-gradient(180deg,#E3B276 0%,#C3854A 52%,#9B6432 100%)}
-      .hr-gate{display:none;position:absolute;left:2%;bottom:6%;width:24%;max-width:310px;height:26%;transform-origin:right bottom;transform:perspective(660px) rotateY(-37deg);background:repeating-linear-gradient(90deg,#F1F6F9 0 5px,rgba(255,255,255,0) 5px 18px),linear-gradient(180deg,rgba(255,255,255,.94) 0 13%,rgba(255,255,255,0) 13%),linear-gradient(180deg,rgba(26,48,34,.8) 0%,rgba(10,22,15,.9) 100%);box-shadow:0 8px 18px rgba(0,0,0,.34)}
-      .hr-gate::before{content:"";position:absolute;left:-3%;right:-3%;top:-20%;height:23%;border-radius:2px;background:linear-gradient(180deg,#4FA06B 0%,#2B6A45 60%,#1A4A2F 100%);box-shadow:0 4px 9px rgba(0,0,0,.4)}
-      .hr-gate::after{content:"";position:absolute;left:1%;right:1%;bottom:-7%;height:9%;background:radial-gradient(50% 50% at 50% 50%,rgba(0,0,0,.38),transparent 72%)}
-      @media(min-width:900px){ .hr-gate{display:block} }
       .hr-finish{position:absolute;left:95%;bottom:0;height:38%;width:12px;transform:translateX(-50%);background:repeating-conic-gradient(#fff 0 25%,#232323 0 50%) 0 0/12px 12px;box-shadow:0 0 0 1px rgba(0,0,0,.2)}
       .hr-post{position:absolute;left:95%;bottom:36%;width:7px;height:15%;transform:translateX(-50%);background:linear-gradient(180deg,#FFFFFF,#D6DFE6);border-radius:3px 3px 0 0;box-shadow:0 2px 6px rgba(0,0,0,.3)}
       .hr-post::before{content:"";position:absolute;left:50%;top:-9px;transform:translateX(-50%);width:13px;height:13px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#FF6F6F,#B93226);box-shadow:0 1px 3px rgba(0,0,0,.35)}
@@ -1572,7 +1568,6 @@ export default function App() {
               <div className="hr-rail" />
               <div className="hr-turfband" />
               <div className="hr-dirtband" />
-              <div className="hr-gate" />
               <div className="hr-finish" />
               <div className="hr-post" />
               {HERO_FIELD.map((h) => (
