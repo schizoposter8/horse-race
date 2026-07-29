@@ -224,7 +224,7 @@ function Styles() {
       .hr-wrap{max-width:520px;margin:0 auto;padding:20px 16px 48px}
       .hr-bigwrap{max-width:1600px;margin:0 auto;padding:24px 24px 48px}
       .hr-biggrid{display:grid;grid-template-columns:1fr;gap:20px}
-      @media(min-width:900px){ .hr-biggrid{grid-template-columns:1fr 280px;align-items:start} }
+      @media(min-width:900px){ .hr-biggrid{grid-template-columns:1fr 380px;align-items:start} }
       .hr-display{font-family:Haettenschweiler,'Arial Narrow','Franklin Gothic Medium',Impact,sans-serif;letter-spacing:.04em;text-transform:uppercase}
       .hr-btn{display:block;width:100%;border:none;border-radius:14px;padding:16px;font-size:18px;font-weight:800;cursor:pointer;font-family:inherit;transition:transform .08s}
       .hr-btn:active{transform:scale(.97)}
@@ -639,12 +639,16 @@ function useRider(code, name, room) {
   const betPlaced = room ? placedRound === roundId : false;
 
   const placeBet = async () => {
-    await sSet(playerKey(code, id), { name, joinedAt: joinedAtRef.current, suit, drinks, roundId });
+    // merge, so fields the host owns (wins, lastWinRound) survive a bet
+    const prev = (await sGet(playerKey(code, id))) || {};
+    await sSet(playerKey(code, id), { ...prev, name, joinedAt: joinedAtRef.current, suit, drinks, roundId });
     setPlacedRound(roundId);
   };
 
   const lockGives = async () => {
+    const prev = (await sGet(playerKey(code, id))) || {};
     await sSet(playerKey(code, id), {
+      ...prev,
       name, joinedAt: joinedAtRef.current, suit, drinks, roundId,
       gives: alloc, givesRound: roundId,
     });
@@ -984,6 +988,7 @@ function HostView({ name, resumeCode, onExit }) {
   const [drawing, setDrawing] = useState(false);
   const roomRef = useRef(null);
   roomRef.current = room;
+  const awardedRef = useRef(0);
 
   // the host rides too: registered as a player, can bet and win like anyone
   const rider = useRider(code, name, room);
@@ -1025,6 +1030,24 @@ function HostView({ name, resumeCode, onExit }) {
     const t = setInterval(load, 8000); // realtime does the work; poll is a safety net
     return () => { live = false; unsub(); clearInterval(t); };
   }, [code]);
+
+  // credit a win to everyone who backed the winning suit — once per round.
+  // lastWinRound on each record makes this safe even if the effect re-runs.
+  useEffect(() => {
+    if (room?.phase !== "results" || !room.round?.winner) return;
+    const rid = room.round.roundId;
+    if (awardedRef.current === rid) return;
+    awardedRef.current = rid;
+    (async () => {
+      const roster = await loadRoster(code);
+      for (const p of roster) {
+        if (p.roundId === rid && p.suit === room.round.winner && p.lastWinRound !== rid) {
+          const { id: pid, ...rec } = p;
+          await sSet(playerKey(code, pid), { ...rec, wins: (rec.wins || 0) + 1, lastWinRound: rid });
+        }
+      }
+    })();
+  }, [room?.phase, room?.round?.roundId, room?.round?.winner, code]);
 
   // one manual card draw: arm a 3-2-1 countdown on every screen, then reveal
   const drawCard = async () => {
@@ -1138,7 +1161,9 @@ function HostView({ name, resumeCode, onExit }) {
               const hasBet = p.roundId === room.round.roundId && p.suit;
               return (
                 <div key={p.id} className="hr-chip" style={{ display: "flex", justifyContent: "space-between", background: C.turf, border: `1px solid ${C.rail}`, borderRadius: 10, padding: "10px 14px", marginBottom: 6 }}>
-                  <b>{p.name}{p.id === rider.id ? " (you)" : ""}</b>
+                  <b>{p.name}{p.id === rider.id ? " (you)" : ""}
+                    {(p.wins || 0) > 0 && <span style={{ color: C.tote, fontWeight: 600, fontSize: 13 }}> 🏆{p.wins}</span>}
+                  </b>
                   <span style={{ color: hasBet ? C.tote : C.chalkDim }}>
                     {hasBet ? <>{SUITS[p.suit].sym} · {p.drinks} sips</> : "deciding…"}
                   </span>
@@ -1335,8 +1360,9 @@ function BigScreenView({ code, onExit }) {
                 {SUITS[room.round.winner].sym} {SUITS[room.round.winner].name} wins!
               </div>
             )}
-            <div style={{ fontSize: 13, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".12em", marginBottom: 8 }}>
-              {room.phase === "results" ? "The damage" : "The betting board"}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 62px", gap: 10, alignItems: "end", fontSize: 14, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".12em", marginBottom: 9, padding: "0 4px" }}>
+              <span>{room.phase === "results" ? "The damage" : "The betting board"}</span>
+              {room.phase !== "race" && <span style={{ textAlign: "right" }}>🏆 Wins</span>}
             </div>
             {/* during the race: one row per suit, showing who's riding it and for how many sips */}
             {room.phase === "race" && SUIT_KEYS.map((s) => {
@@ -1345,9 +1371,9 @@ function BigScreenView({ code, onExit }) {
                 <div key={s} className="hr-chip" style={{
                   display: "flex", alignItems: "center", gap: 10,
                   background: C.turf, border: `1px solid ${C.rail}`, borderRadius: 10,
-                  padding: "10px 12px", marginBottom: 6, fontSize: 16,
+                  padding: "13px 14px", marginBottom: 7, fontSize: 19,
                 }}>
-                  <span style={{ fontSize: 26, lineHeight: 1, width: 28, textAlign: "center", color: SUITS[s].red ? C.red : C.chalk }}>
+                  <span style={{ fontSize: 31, lineHeight: 1, width: 34, textAlign: "center", color: SUITS[s].red ? C.red : C.chalk }}>
                     {SUITS[s].sym}
                   </span>
                   <div style={{ flex: 1, lineHeight: 1.35 }}>
@@ -1358,6 +1384,16 @@ function BigScreenView({ code, onExit }) {
                 </div>
               );
             })}
+            {room.phase === "race" && players.some((p) => (p.wins || 0) > 0) && (
+              <div style={{ marginTop: 12, background: C.turf, border: `1px solid ${C.rail}`, borderRadius: 10, padding: "11px 14px" }}>
+                <div style={{ fontSize: 13, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".12em", marginBottom: 7 }}>🏆 Total wins</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "5px 16px", fontSize: 17 }}>
+                  {[...players].filter((p) => (p.wins || 0) > 0).sort((a, b) => b.wins - a.wins).map((p) => (
+                    <span key={p.id}>{p.name} <b className="hr-display" style={{ color: C.tote, fontSize: 20 }}>{p.wins}</b></span>
+                  ))}
+                </div>
+              </div>
+            )}
             {room.phase !== "race" && [...players]
               .sort((a, b) => {
                 if (room.phase !== "results") return 0;
@@ -1372,10 +1408,11 @@ function BigScreenView({ code, onExit }) {
                   const inc = incomingFor(p.id, players, room.round.roundId);
                   const incTotal = inc.reduce((a, q) => a + q.n, 0);
                   return (
-                    <div key={p.id} className="hr-chip" style={{ background: o.give ? "rgba(240,194,75,.15)" : C.turf, border: `1px solid ${o.give ? C.tote : C.rail}`, borderRadius: 10, padding: "12px 14px", marginBottom: 6, fontSize: 17 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                    <div key={p.id} className="hr-chip" style={{ background: o.give ? "rgba(240,194,75,.15)" : C.turf, border: `1px solid ${o.give ? C.tote : C.rail}`, borderRadius: 10, padding: "14px", marginBottom: 7, fontSize: 19 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr auto 62px", alignItems: "center", gap: 10 }}>
                         <b>{p.name}</b>
                         <span style={{ color: o.give ? C.tote : o.drink ? C.red : C.chalkDim, textAlign: "right" }}>{o.label}</span>
+                        <span className="hr-display" style={{ textAlign: "right", fontSize: 26, color: (p.wins || 0) > 0 ? C.tote : C.chalkDim }}>{p.wins || 0}</span>
                       </div>
                       {incTotal > 0 && (
                         <div style={{ fontSize: 14, color: C.red, marginTop: 4 }}>
@@ -1386,11 +1423,12 @@ function BigScreenView({ code, onExit }) {
                   );
                 }
                 return (
-                  <div key={p.id} className="hr-chip" style={{ display: "flex", justifyContent: "space-between", background: C.turf, border: `1px solid ${C.rail}`, borderRadius: 10, padding: "12px 14px", marginBottom: 6, fontSize: 17 }}>
+                  <div key={p.id} className="hr-chip" style={{ display: "grid", gridTemplateColumns: "1fr auto 62px", alignItems: "center", gap: 10, background: C.turf, border: `1px solid ${C.rail}`, borderRadius: 10, padding: "14px", marginBottom: 7, fontSize: 19 }}>
                     <b>{p.name}</b>
                     <span style={{ color: bet ? C.tote : C.chalkDim }}>
                       {bet ? <>{SUITS[bet.suit].sym} · {bet.drinks} sips</> : "deciding…"}
                     </span>
+                    <span className="hr-display" style={{ textAlign: "right", fontSize: 26, color: (p.wins || 0) > 0 ? C.tote : C.chalkDim }}>{p.wins || 0}</span>
                   </div>
                 );
               })}
