@@ -248,6 +248,10 @@ function Styles() {
       .hr-rail{position:absolute;left:0;right:0;bottom:48%;height:4%;background:repeating-linear-gradient(90deg,#fff 0 5px,transparent 5px 52px);border-top:5px solid #fff;border-bottom:4px solid #f4f8fb}
       .hr-turfband{position:absolute;left:0;right:0;bottom:38%;height:10%;background:linear-gradient(180deg,#5CB065,#2F7C46)}
       .hr-dirtband{position:absolute;left:0;right:0;bottom:0;height:38%;background:linear-gradient(180deg,#E3B276 0%,#C3854A 52%,#9B6432 100%)}
+      .hr-finish{position:absolute;left:95%;bottom:0;height:38%;width:12px;transform:translateX(-50%);background:repeating-conic-gradient(#fff 0 25%,#232323 0 50%) 0 0/12px 12px;box-shadow:0 0 0 1px rgba(0,0,0,.2)}
+      .hr-post{position:absolute;left:95%;bottom:36%;width:7px;height:15%;transform:translateX(-50%);background:linear-gradient(180deg,#FFFFFF,#D6DFE6);border-radius:3px 3px 0 0;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+      .hr-post::before{content:"";position:absolute;left:50%;top:-9px;transform:translateX(-50%);width:13px;height:13px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#FF6F6F,#B93226);box-shadow:0 1px 3px rgba(0,0,0,.35)}
+      @media(min-width:900px){ .hr-finish,.hr-post{left:88%} .hr-finish{width:16px;background-size:16px 16px} .hr-post{width:9px} }
       .hr-heroHorse{position:absolute;transform:translateX(-50%);filter:drop-shadow(0 12px 18px rgba(0,0,0,.6));animation:hgallop .62s ease-in-out infinite}
       /* mobile: evenly spread across the top band, all one size */
       .hr-scene img{width:25%;max-width:145px}
@@ -268,22 +272,21 @@ function Styles() {
       @media(min-width:900px){ .hr-scrim{height:100%;background:linear-gradient(180deg,rgba(255,255,255,.62) 0%,rgba(255,255,255,.46) 30%,rgba(255,255,255,.3) 50%,rgba(255,255,255,.06) 70%,rgba(255,255,255,0) 82%)} }
       .hr-content{position:relative;flex:1;margin:196px auto 0;max-width:460px;padding:4px 18px 28px;text-align:center}
       @media(min-width:900px){ .hr-content{margin:0 auto;max-width:520px;padding:7vh 24px 4vh} }
-      .hr-mark{font-size:17px;letter-spacing:.26em;text-transform:uppercase;font-weight:800;color:#8A5A16}
-      .hr-mark small{display:block;font-size:11px;letter-spacing:.16em;color:rgba(18,58,38,.62);margin-top:3px;font-weight:600}
+      .hr-mark{font-size:17px;letter-spacing:.17em;text-transform:uppercase;font-weight:800;color:#8A5A16;text-shadow:0 1px 0 rgba(255,255,255,.6)}
       .hr-h1{font-size:clamp(42px,8.5vw,72px);line-height:.9;margin:10px 0 12px;color:#0E3A24;text-shadow:0 2px 0 rgba(255,255,255,.6)}
       .hr-sub{margin:0 0 20px;font-size:16px;line-height:1.5;color:#F1E6CD}
       .hr-sub span{color:#FF57B4}
-      .hr-field{width:100%;box-sizing:border-box;border-radius:999px;border:1.5px solid rgba(18,58,38,.28);background:#FFFDF6;color:#123A26;padding:14px 18px;font-size:17px;font-family:inherit;box-shadow:0 2px 6px rgba(20,60,40,.08)}
+      .hr-field{width:100%;box-sizing:border-box;border-radius:999px;border:2px solid rgba(18,58,38,.38);background:#FFFDF6;color:#123A26;padding:15px 18px;font-size:17px;font-family:inherit;box-shadow:0 3px 10px rgba(20,60,40,.12)}
       .hr-field:focus{outline:none;border-color:#2F7C46;background:#fff}
       .hr-field::placeholder{color:rgba(18,58,38,.42)}
-      .hr-cta{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;box-sizing:border-box;border-radius:999px;padding:15px 18px;font-family:inherit;font-size:18px;font-weight:800;cursor:pointer;transition:transform .08s,filter .15s}
+      .hr-cta{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;box-sizing:border-box;border-radius:999px;padding:17px 20px;margin-bottom:2px;font-family:inherit;font-size:19px;font-weight:800;letter-spacing:.02em;cursor:pointer;transition:transform .08s,filter .15s}
       .hr-cta:active{transform:scale(.98)}
       .hr-cta:disabled{opacity:.42;cursor:default}
       .hr-cta:focus-visible{outline:3px solid #EFC44F;outline-offset:3px}
-      .hr-cta-mag{background:linear-gradient(180deg,#FF52B2,#CE1179);color:#fff;border:1px solid rgba(255,255,255,.35);box-shadow:0 8px 24px rgba(150,20,90,.3)}
-      .hr-cta-gold{background:linear-gradient(180deg,#FBEBB4,#D9A62C);color:#2A1A06;border:1px solid rgba(90,60,10,.3);box-shadow:0 6px 18px rgba(150,105,20,.25)}
-      .hr-cta-ghost{background:rgba(255,255,255,.78);color:#123A26;border:1.5px solid rgba(18,58,38,.3)}
-      .hr-pill{border-radius:999px;padding:7px 16px 9px;margin:16px 0 10px;background:linear-gradient(180deg,#FBEBB4,#D7A835);border:1px solid rgba(90,60,10,.28);box-shadow:0 6px 18px rgba(120,85,15,.22),inset 0 1px 0 rgba(255,255,255,.65)}
+      .hr-cta-mag{background:linear-gradient(180deg,#FF4FB0,#BE0A6C);color:#fff;border:2px solid rgba(255,255,255,.6);box-shadow:0 10px 26px rgba(130,10,78,.45),inset 0 1px 0 rgba(255,255,255,.4)}
+      .hr-cta-gold{background:linear-gradient(180deg,#FFE486,#C89310);color:#231402;border:2px solid rgba(70,45,5,.5);box-shadow:0 10px 24px rgba(110,75,10,.38),inset 0 1px 0 rgba(255,255,255,.65)}
+      .hr-cta-ghost{background:#fff;color:#0F3D26;border:2px solid rgba(15,61,38,.48);box-shadow:0 8px 20px rgba(20,60,40,.2)}
+      .hr-pill{border-radius:999px;padding:7px 16px 9px;margin:16px 0 10px;background:linear-gradient(180deg,#FBEBB4,#D7A835);border:2px solid rgba(70,45,5,.42);box-shadow:0 8px 20px rgba(120,85,15,.3),inset 0 1px 0 rgba(255,255,255,.7)}
       .hr-pill label{display:block;text-align:center;font-size:10px;letter-spacing:.24em;color:#6B4A0E;font-weight:800;text-transform:uppercase}
       .hr-pill input{width:100%;box-sizing:border-box;border:none;background:transparent;text-align:center;font-family:Haettenschweiler,'Arial Narrow','Franklin Gothic Medium',Impact,sans-serif;font-size:32px;letter-spacing:.26em;color:#241505;text-transform:uppercase;padding:0;outline:none}
       .hr-pill input::placeholder{color:rgba(36,21,5,.32);letter-spacing:.18em}
@@ -1565,6 +1568,8 @@ export default function App() {
               <div className="hr-rail" />
               <div className="hr-turfband" />
               <div className="hr-dirtband" />
+              <div className="hr-finish" />
+              <div className="hr-post" />
               {HERO_FIELD.map((h) => (
                 <img key={h.s} className="hr-heroHorse" src={HORSE_IMGS[h.s]} alt=""
                   style={{ animationDelay: h.delay }} />
@@ -1579,7 +1584,7 @@ export default function App() {
             <div className="hr-scrim" aria-hidden="true" />
 
             <div className="hr-content">
-              <div className="hr-mark">Horse Race<small>Bet in sips. Blame the deck.</small></div>
+              <div className="hr-mark">Bet in sips. Blame the deck.</div>
               <h1 className="hr-display hr-h1">Race the room</h1>
               <input className="hr-field" placeholder="Your name" value={name} maxLength={16}
                 onChange={(e) => setName(e.target.value)} style={{ marginBottom: 10 }} />
