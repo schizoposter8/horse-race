@@ -242,17 +242,46 @@ function Styles() {
       .hr-hero{position:relative;overflow:hidden;min-height:100vh;display:flex;flex-direction:column;background:linear-gradient(180deg,#E6F2FB 0%,#F7FBFE 100%)}
       .hr-scene{position:absolute;left:0;right:0;top:0;height:236px;overflow:hidden;pointer-events:none}
       @media(min-width:900px){ .hr-scene{height:100%} }
-      .hr-sky{position:absolute;inset:0;background:linear-gradient(180deg,#79C1EE 0%,#A9D9F5 38%,#D6ECF9 68%,#EAF4FB 100%)}
-      .hr-sun{position:absolute;left:58%;top:-16%;width:60%;height:62%;filter:blur(26px);background:radial-gradient(closest-side,rgba(255,255,255,.92),rgba(255,247,222,.4) 55%,transparent 74%)}
-      .hr-stands{position:absolute;left:0;right:0;bottom:52%;height:16%;background:linear-gradient(180deg,#82909C 0%,#66727E 62%,#55606B 100%);box-shadow:0 2px 0 rgba(255,255,255,.35)}
-      .hr-rail{position:absolute;left:0;right:0;bottom:48%;height:4%;background:repeating-linear-gradient(90deg,#fff 0 5px,transparent 5px 52px);border-top:5px solid #fff;border-bottom:4px solid #f4f8fb}
-      .hr-turfband{position:absolute;left:0;right:0;bottom:38%;height:10%;background:linear-gradient(180deg,#5CB065,#2F7C46)}
-      .hr-dirtband{position:absolute;left:0;right:0;bottom:0;height:38%;background:linear-gradient(180deg,#E3B276 0%,#C3854A 52%,#9B6432 100%)}
-      .hr-finish{position:absolute;left:95%;bottom:0;height:38%;width:12px;transform:translateX(-50%);background:repeating-conic-gradient(#fff 0 25%,#232323 0 50%) 0 0/12px 12px;box-shadow:0 0 0 1px rgba(0,0,0,.2)}
-      .hr-post{position:absolute;left:95%;bottom:36%;width:7px;height:15%;transform:translateX(-50%);background:linear-gradient(180deg,#FFFFFF,#D6DFE6);border-radius:3px 3px 0 0;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+      .hr-sky{position:absolute;inset:0;background:
+        radial-gradient(58% 26% at 16% 14%,rgba(255,255,255,.85),transparent 72%),
+        radial-gradient(46% 20% at 58% 8%,rgba(255,255,255,.7),transparent 74%),
+        radial-gradient(38% 17% at 88% 20%,rgba(255,255,255,.6),transparent 72%),
+        linear-gradient(180deg,#5FB2E6 0%,#8CCAF0 32%,#BFE2F7 60%,#DCEEF8 78%,#E9F3F7 100%)}
+      .hr-sun{position:absolute;left:58%;top:-18%;width:62%;height:64%;filter:blur(30px);background:radial-gradient(closest-side,rgba(255,255,255,.9),rgba(255,248,226,.38) 55%,transparent 76%)}
+      .hr-trees{position:absolute;left:0;right:0;bottom:58%;height:9%;background:radial-gradient(circle at 50% 100%,#2F5A34 0 58%,transparent 60%) 0 -5px/42px 30px repeat-x,radial-gradient(circle at 50% 100%,#27492C 0 58%,transparent 60%) 21px -1px/58px 26px repeat-x,linear-gradient(180deg,#2C5532,#1F3F26)}
+      .hr-stands{position:absolute;left:0;right:0;bottom:49%;height:18%;background:
+        linear-gradient(180deg,#39454F 0 13%,rgba(0,0,0,.2) 13% 16.5%,transparent 16.5%),
+        radial-gradient(circle,rgba(255,255,255,.5) 34%,transparent 36%) 2px 3px/8px 8px,
+        radial-gradient(circle,rgba(255,198,152,.38) 34%,transparent 36%) 5px 7px/11px 11px,
+        radial-gradient(circle,rgba(118,150,192,.3) 34%,transparent 36%) 9px 2px/14px 14px,
+        repeating-linear-gradient(180deg,rgba(0,0,0,.12) 0 1px,transparent 1px 6px),
+        linear-gradient(180deg,#929EA9 0%,#76828D 55%,#5E6974 100%)}
+      .hr-rail{position:absolute;left:0;right:0;bottom:46.5%;height:3.6%;background:
+        repeating-linear-gradient(90deg,#FFFFFF 0 4px,transparent 4px 46px),
+        linear-gradient(180deg,transparent 0 14%,#FFFFFF 14% 31%,transparent 31% 58%,#EFF4F8 58% 73%,transparent 73%);
+        filter:drop-shadow(0 1px 1px rgba(0,0,0,.18))}
+      .hr-innerrail{position:absolute;left:0;right:0;bottom:32.5%;height:3%;background:
+        repeating-linear-gradient(90deg,rgba(255,255,255,.95) 0 4px,transparent 4px 40px),
+        linear-gradient(180deg,transparent 0 18%,rgba(255,255,255,.95) 18% 36%,transparent 36% 64%,rgba(240,246,250,.9) 64% 80%,transparent 80%);
+        filter:drop-shadow(0 1px 1px rgba(0,0,0,.2))}
+      .hr-turfband{position:absolute;left:0;right:0;bottom:35%;height:11.5%;background:
+        repeating-linear-gradient(90deg,rgba(255,255,255,.12) 0 34px,rgba(0,0,0,.07) 34px 68px),
+        linear-gradient(180deg,#66BD6C 0%,#499B5C 55%,#31814A 100%)}
+      .hr-dirtband{position:absolute;left:0;right:0;bottom:0;height:33%;background:
+        repeating-linear-gradient(91deg,rgba(0,0,0,.05) 0 2px,transparent 2px 11px),
+        linear-gradient(180deg,rgba(60,35,12,.34) 0%,rgba(255,236,205,.12) 14%,rgba(255,240,212,.16) 42%,rgba(86,52,20,.14) 80%,rgba(60,34,12,.3) 100%),
+        linear-gradient(180deg,#DCA86B 0%,#C98E52 38%,#B27745 70%,#956033 100%)}
+      .hr-dust{position:absolute;left:4%;right:2%;bottom:5%;height:17%;filter:blur(7px);background:
+        radial-gradient(55% 70% at 22% 62%,rgba(226,196,152,.55),transparent 72%),
+        radial-gradient(45% 62% at 48% 56%,rgba(226,196,152,.45),transparent 74%),
+        radial-gradient(42% 58% at 72% 60%,rgba(226,196,152,.4),transparent 74%),
+        radial-gradient(38% 55% at 90% 55%,rgba(226,196,152,.3),transparent 74%)}
+      .hr-vignette{position:absolute;inset:0;background:radial-gradient(135% 95% at 50% 42%,transparent 52%,rgba(28,38,28,.2) 100%)}
+      .hr-finish{position:absolute;left:95%;bottom:0;height:33%;width:12px;transform:translateX(-50%);background:repeating-conic-gradient(#fff 0 25%,#232323 0 50%) 0 0/12px 12px;box-shadow:0 0 0 1px rgba(0,0,0,.2)}
+      .hr-post{position:absolute;left:95%;bottom:31%;width:7px;height:15%;transform:translateX(-50%);background:linear-gradient(180deg,#FFFFFF,#D6DFE6);border-radius:3px 3px 0 0;box-shadow:0 2px 6px rgba(0,0,0,.3)}
       .hr-post::before{content:"";position:absolute;left:50%;top:-9px;transform:translateX(-50%);width:13px;height:13px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#FF6F6F,#B93226);box-shadow:0 1px 3px rgba(0,0,0,.35)}
       @media(min-width:900px){ .hr-finish,.hr-post{left:88%} .hr-finish{width:16px;background-size:16px 16px} .hr-post{width:9px} }
-      .hr-heroHorse{position:absolute;transform:translateX(-50%);filter:drop-shadow(0 12px 18px rgba(0,0,0,.6));animation:hgallop .62s ease-in-out infinite}
+      .hr-heroHorse{position:absolute;transform:translateX(-50%);filter:drop-shadow(0 7px 4px rgba(60,38,14,.45)) drop-shadow(0 16px 12px rgba(60,38,14,.3));animation:hgallop .62s ease-in-out infinite}
       /* mobile: evenly spread across the top band, all one size */
       .hr-scene img{width:25%;max-width:145px}
       .hr-scene img:nth-of-type(1){left:13%;bottom:15%}
@@ -1602,10 +1631,13 @@ export default function App() {
             <div className="hr-scene" aria-hidden="true">
               <div className="hr-sky" />
               <div className="hr-sun" />
+              <div className="hr-trees" />
               <div className="hr-stands" />
               <div className="hr-rail" />
               <div className="hr-turfband" />
+              <div className="hr-innerrail" />
               <div className="hr-dirtband" />
+              <div className="hr-dust" />
               <div className="hr-finish" />
               <div className="hr-post" />
               {HERO_FIELD.map((h) => (
@@ -1618,6 +1650,7 @@ export default function App() {
                   animationDelay: `${c.delay}s`, "--r": `${c.rot}deg`,
                 }} />
               ))}
+              <div className="hr-vignette" />
             </div>
             <div className="hr-scrim" aria-hidden="true" />
 
