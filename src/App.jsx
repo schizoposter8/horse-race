@@ -76,18 +76,136 @@ const sfx = (() => {
   };
 })();
 
+/* ---------------- race caller ----------------
+   Browser speech for now. To swap in real recorded lines later, keep these same
+   call sites and replace say() with an <audio> play of a matching mp3 from
+   /public/audio — the line pools below double as the recording script. */
+
+const CALLS = {
+  break: [
+    "And they're off! {S} breaks first!",
+    "Here we go — {S} jumps out in front!",
+    "{S} grabs the early lead!",
+    "{S} shows the way out of the gate!",
+  ],
+  lead: [
+    "Ohhh my — {S} takes the lead!",
+    "Look out! {S} surges to the front!",
+    "And now it's {S} in front!",
+    "{S} storms past and grabs the lead!",
+    "Here comes {S}! {S} has taken over!",
+  ],
+  steal: [
+    "{O} stumbles — and {S} takes over!",
+    "Disaster for {O}! {S} inherits the lead!",
+    "{O} falls back, and {S} pounces!",
+    "Oh no, {O} is in trouble — it's {S} in front!",
+  ],
+  win: [
+    "And {S} takes the crown!!",
+  ],
+};
+
+const announcer = (() => {
+  let enabled = true;
+  let voice = null;
+  let picked = false;
+  let lastSpoke = 0;
+  let pending = null;
+
+  const synth = () => (typeof window !== "undefined" ? window.speechSynthesis : null);
+
+  // prefer a fuller en-US voice; browsers load the list asynchronously
+  function chooseVoice() {
+    const s = synth();
+    if (!s || picked) return;
+    const all = s.getVoices();
+    if (!all.length) return;
+    const want = ["Google US English", "Microsoft Guy", "Microsoft David", "Daniel", "Alex", "Fred"];
+    voice = want.map((n) => all.find((v) => v.name.includes(n))).find(Boolean)
+      || all.find((v) => v.lang === "en-US") || all.find((v) => v.lang && v.lang.startsWith("en")) || null;
+    picked = true;
+  }
+
+  function say(text) {
+    const s = synth();
+    if (!s || !enabled) return;
+    chooseVoice();
+    try {
+      s.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      if (voice) u.voice = voice;
+      u.rate = 1.14;   // a shade quick, like a live call
+      u.pitch = 1.18;  // lifted for excitement
+      u.volume = 1;
+      s.speak(u);
+    } catch { /* speech unavailable — stay silent */ }
+  }
+
+  return {
+    setEnabled(v) {
+      enabled = v;
+      if (!v) {
+        clearTimeout(pending);
+        try { const s = synth(); if (s) s.cancel(); } catch { /* fine */ }
+      }
+    },
+    isEnabled() { return enabled; },
+    prime() {
+      const s = synth();
+      if (!s) return;
+      chooseVoice();
+      if (!picked && s.addEventListener) s.addEventListener("voiceschanged", chooseVoice, { once: true });
+    },
+    /** kind: break | lead | steal | win. force skips the cooldown (used for the win). */
+    call(kind, { suit, old, delay = 1600, force = false } = {}) {
+      if (!enabled) return;
+      const now = Date.now();
+      if (!force && now - lastSpoke < 8000) return;   // never machine-gun
+      lastSpoke = now;
+      const pool = CALLS[kind];
+      let line = pool[Math.floor(Math.random() * pool.length)];
+      line = line.split("{S}").join(SUITS[suit].name);
+      if (old) line = line.split("{O}").join(SUITS[old].name);
+      clearTimeout(pending);
+      pending = setTimeout(() => say(line), delay);
+    },
+  };
+})();
+
+function AnnouncerToggle() {
+  const [on, setOn] = useState(announcer.isEnabled());
+  return (
+    <button
+      aria-label={on ? "Mute the race caller" : "Unmute the race caller"}
+      onClick={() => { announcer.setEnabled(!on); setOn(!on); }}
+      style={{
+        position: "fixed", top: 10, right: 60, zIndex: 50,
+        width: 42, height: 42, borderRadius: "50%",
+        background: C.turf, border: `2px solid ${C.rail}`, color: C.chalk,
+        fontSize: 18, cursor: "pointer", opacity: on ? 1 : .45,
+      }}
+    >
+      🎙️
+    </button>
+  );
+}
+
 /**
  * Watches room state and fires draw / flip / everyone-drinks / result sounds.
  * myWin: true → win fanfare at results, false → sad trombone,
  * "spect" → fanfare (host & big screen), null → silent at results.
  */
-function useRaceSfx(room, myWin = "spect") {
+function useRaceSfx(room, myWin = "spect", announce = false) {
   const prev = useRef({ draw: -1, flipped: -1, phase: null, roundId: null });
+  // the suit the caller last named as leader; null until someone is clearly clear
+  const spokenLeader = useRef(null);
   useEffect(() => {
     if (!room) return;
     const rd = room.round;
     const p = prev.current;
     if (p.roundId !== rd.roundId) {
+      spokenLeader.current = null;   // fresh race, fresh storyline
       prev.current = { draw: rd.drawIdx, flipped: rd.flipped, phase: room.phase, roundId: rd.roundId };
       return;
     }
@@ -101,14 +219,31 @@ function useRaceSfx(room, myWin = "spect") {
           if (flipDrink) sfx.everyone();
         }, 1400);
       }
+
+      if (announce) {
+        // a leader only counts when alone out front — ties stay silent
+        const best = Math.max(...SUIT_KEYS.map((s) => rd.positions[s]));
+        const atTop = SUIT_KEYS.filter((s) => rd.positions[s] === best);
+        const leader = best > 0 && atTop.length === 1 ? atTop[0] : null;
+        if (leader && leader !== spokenLeader.current) {
+          const wasLeader = spokenLeader.current;
+          // a track card knocking the old leader back is the best call of the lot
+          const stolen = wasLeader && rd.flipped > p.flipped && rd.lastFlip === wasLeader;
+          if (!wasLeader) announcer.call("break", { suit: leader });
+          else if (stolen) announcer.call("steal", { suit: leader, old: wasLeader, delay: 2600 });
+          else announcer.call("lead", { suit: leader });
+          spokenLeader.current = leader;
+        }
+      }
     }
     if (room.phase === "results" && p.phase !== "results") {
+      if (announce && rd.winner) announcer.call("win", { suit: rd.winner, delay: 900, force: true });
       if (myWin === true) sfx.win();
       else if (myWin === false) sfx.lose();
       else if (myWin === "spect") sfx.win();
     }
     prev.current = { draw: rd.drawIdx, flipped: rd.flipped, phase: room.phase, roundId: rd.roundId };
-  }, [room, myWin]);
+  }, [room, myWin, announce]);
 }
 
 function SoundToggle() {
@@ -898,7 +1033,7 @@ function SpotifyPanel({ room, returnState, showSetupHint = false }) {
     const p = playerRef.current;
     if (!p || !customPlaying || !room) return;
     if (!room.round?.pendingAt && room.round?.drawIdx > 0) {
-      const t = setTimeout(() => p.setVolume(0.6).catch(() => {}), 2600);
+      const t = setTimeout(() => p.setVolume(0.6).catch(() => {}), 3800);
       return () => clearTimeout(t);
     }
   }, [room?.round?.drawIdx, room?.round?.pendingAt, customPlaying, room]);
@@ -1037,7 +1172,7 @@ function HostView({ name, resumeCode, onExit }) {
   // the host rides too: registered as a player, can bet and win like anyone
   const rider = useRider(code, name, room);
   const myWin = room?.phase === "results" ? (rider.betPlaced ? rider.suit === room.round.winner : "spect") : "spect";
-  useRaceSfx(room, myWin);
+  useRaceSfx(room, myWin, true);
 
   const writeRoom = useCallback(async (r) => {
     setRoom(r);
@@ -1315,7 +1450,7 @@ function BigScreenView({ code, onExit }) {
   const [players, setPlayers] = useState([]);
   const [gone, setGone] = useState(false);
 
-  useRaceSfx(room);
+  useRaceSfx(room, "spect", true);
 
   // poll room
   useEffect(() => {
@@ -1618,7 +1753,7 @@ export default function App() {
 
   // unlock audio on the first tap anywhere (browser autoplay policy)
   useEffect(() => {
-    const h = () => { sfx.unlock(); };
+    const h = () => { sfx.unlock(); announcer.prime(); };
     window.addEventListener("pointerdown", h, { once: true });
     return () => window.removeEventListener("pointerdown", h);
   }, []);
@@ -1639,6 +1774,7 @@ export default function App() {
     <div className="hr-root">
       <Styles />
       <SoundToggle />
+      <AnnouncerToggle />
       {screen === "home" && (
         <div className="hr-homewrap">
           <div className="hr-hero">
