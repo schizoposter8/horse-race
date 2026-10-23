@@ -300,7 +300,17 @@ function Styles() {
       .hr-scrim{position:absolute;left:0;right:0;top:0;height:236px;background:linear-gradient(180deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.2) 58%,#E9F3FB 100%)}
       @media(min-width:900px){ .hr-scrim{height:100%;background:linear-gradient(180deg,rgba(255,255,255,.62) 0%,rgba(255,255,255,.46) 30%,rgba(255,255,255,.3) 50%,rgba(255,255,255,.06) 70%,rgba(255,255,255,0) 82%)} }
       .hr-content{position:relative;flex:1;margin:196px auto 0;max-width:460px;padding:4px 18px 28px;text-align:center}
-      @media(min-width:900px){ .hr-content{margin:0 auto;max-width:520px;padding:7vh 24px 4vh} }
+      @media(min-width:900px){
+        .hr-content{margin:0 auto;max-width:940px;padding:6vh 24px 4vh}
+        .hr-namewrap{max-width:440px;margin:0 auto 20px}
+        .hr-actions{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+        .hr-card{background:rgba(255,253,246,.88);border:1.5px solid rgba(18,58,38,.2);border-radius:20px;padding:22px 20px 20px;box-shadow:0 16px 38px rgba(18,50,34,.22);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
+        .hr-card + .hr-card{margin-top:0}
+        .hr-cardlabel{display:block;font-size:13px;letter-spacing:.2em;text-transform:uppercase;font-weight:800;color:#2F7C46;margin-bottom:14px}
+        .hr-cta{font-size:20px;padding:18px 20px}
+        .hr-pill{margin:0 0 12px}
+        .hr-note{margin:10px 0 0}
+      }
       .hr-mark{font-size:17px;letter-spacing:.17em;text-transform:uppercase;font-weight:800;color:#8A5A16;text-shadow:0 1px 0 rgba(255,255,255,.6)}
       .hr-h1{font-size:clamp(42px,8.5vw,72px);line-height:.9;margin:10px 0 12px;color:#0E3A24;text-shadow:0 2px 0 rgba(255,255,255,.6)}
       .hr-sub{margin:0 0 20px;font-size:16px;line-height:1.5;color:#F1E6CD}
@@ -319,6 +329,11 @@ function Styles() {
       .hr-pill label{display:block;text-align:center;font-size:10px;letter-spacing:.24em;color:#6B4A0E;font-weight:800;text-transform:uppercase}
       .hr-pill input{width:100%;box-sizing:border-box;border:none;background:transparent;text-align:center;font-family:Haettenschweiler,'Arial Narrow','Franklin Gothic Medium',Impact,sans-serif;font-size:32px;letter-spacing:.26em;color:#241505;text-transform:uppercase;padding:0;outline:none}
       .hr-pill input::placeholder{color:rgba(36,21,5,.32);letter-spacing:.18em}
+      .hr-namewrap{margin:0 0 12px}
+      .hr-actions{display:block}
+      .hr-card{padding:0}
+      .hr-card + .hr-card{margin-top:16px}
+      .hr-cardlabel{display:none}
       .hr-note{text-align:center;font-size:12px;color:rgba(18,58,38,.62);margin:8px 0 4px}
       .hr-resume{display:flex;justify-content:center;margin-top:14px}
       .hr-linkbtn{flex-shrink:0;background:none;border:none;color:#0F3D26;font-family:inherit;font-size:15px;font-weight:800;letter-spacing:.03em;cursor:pointer;padding:10px 6px;text-shadow:0 1px 0 rgba(255,255,255,.65)}
@@ -1657,13 +1672,23 @@ export default function App() {
             <div className="hr-content">
               <div className="hr-mark">Bet in sips. Blame the deck.</div>
               <h1 className="hr-display hr-h1">Race the room</h1>
-              <input className="hr-field" placeholder="Your name" value={name} maxLength={16}
-                onChange={(e) => setName(e.target.value)} style={{ marginBottom: 10 }} />
-              <button className="hr-cta hr-cta-mag" disabled={!name.trim()} onClick={() => setScreen("host")}>
-                👑 Host a party
-              </button>
-              <div className="hr-note">Hosts ride too — you deal the cards and bet.</div>
+              {/* name is required for both paths, so it sits above them */}
+              <div className="hr-namewrap">
+                <input className="hr-field" placeholder="Your name" value={name} maxLength={16}
+                  onChange={(e) => setName(e.target.value)} />
+              </div>
 
+              <div className="hr-actions">
+                <div className="hr-card">
+                  <div className="hr-cardlabel">Start a race</div>
+                  <button className="hr-cta hr-cta-mag" disabled={!name.trim()} onClick={() => setScreen("host")}>
+                    👑 Host a party
+                  </button>
+                  <div className="hr-note">Hosts ride too — you deal the cards and bet.</div>
+                </div>
+
+                <div className="hr-card">
+                  <div className="hr-cardlabel">Join a race</div>
               <div className="hr-pill">
                 <label htmlFor="hr-code">Room code</label>
                 <input id="hr-code" placeholder="CODE" value={joinCode} maxLength={4} inputMode="text"
@@ -1684,6 +1709,8 @@ export default function App() {
                   onClick={() => { setResumeCode(joinCode); setScreen("resume"); }}>
                   Resume hosting this code →
                 </button>
+              </div>
+                </div>
               </div>
             </div>
 
