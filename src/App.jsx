@@ -249,6 +249,9 @@ function Styles() {
       .hr-oddpill{display:inline-flex;align-items:center;gap:5px;background:rgba(7,48,30,.8);border:1px solid rgba(255,255,255,.16);border-radius:999px;padding:4px 10px;font-size:14px;font-weight:700}
       .hr-rotatehint{display:none;text-align:center;font-size:13px;margin-top:8px}
       @media (orientation:portrait) and (max-width:700px){ .hr-rotatehint{display:block} }
+      .hr-resbadge{position:absolute;left:0;right:0;top:8px;margin:0 auto;z-index:3;width:min(94%,520px);box-sizing:border-box;padding:8px 12px 9px;text-align:center;animation:slidein .35s ease 1.2s both}
+      .hr-resbadge-big{font-size:clamp(20px,6vw,30px);line-height:1.05}
+      .hr-resbadge-sub{font-size:13px;margin-top:4px;line-height:1.3}
       .hr-root{min-height:100vh;background:${C.turfDeep};color:${C.chalk};font-family:ui-rounded,'Segoe UI',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
       .hr-wrap{max-width:520px;margin:0 auto;padding:20px 16px 48px}
       .hr-bigwrap{max-width:1600px;margin:0 auto;padding:24px 24px 48px}
@@ -678,7 +681,7 @@ function useLandscapePhone() {
 
 /* ---------------- the track ---------------- */
 
-function Track({ round, racing, rules, big = false, fill = false, lift = 0 }) {
+function Track({ round, racing, rules, big = false, fill = false, lift = 0, children = null }) {
   const [flat, setFlat] = useState(false);   // true once 3D proves unavailable
   if (!round) return null;
   const cols = TRACK_LEN + 2; // gate + 6 + finish
@@ -713,8 +716,10 @@ function Track({ round, racing, rules, big = false, fill = false, lift = 0 }) {
           <Suspense fallback={null}>
             <RaceScene mode="race" imgs={HORSE_IMGS} round={round} racing={racing} lift={lift} onFail={() => setFlat(true)} />
           </Suspense>
+          {children}
         </div>
       )}
+      {flat && children && <div style={{ position: "relative", minHeight: 96, marginBottom: 10 }}>{children}</div>}
       {flat && (<div className={fill ? "hr-fillflat" : undefined}>
       {/* face-down track cards: each flips (3D) once ALL four horses reach its column */}
       <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols},1fr)`, gap: 4, marginBottom: 10 }}>
@@ -933,7 +938,59 @@ function BetForm({ rider }) {
 }
 
 /* personal results: outcome card, incoming sips, and the winner's give-out UI */
-function RiderResults({ rider, room, roster }) {
+/* your result, laid over the winner's close-up so it shows without scrolling */
+function ResultBadge({ rider, room, roster }) {
+  const bet = rider.betPlaced ? { suit: rider.suit, drinks: rider.drinks } : null;
+  const o = outcome(bet, room.round.winner);
+  const won = o.give > 0;
+  const incoming = incomingFor(rider.id, roster, room.round.roundId);
+  const incTotal = incoming.reduce((a, q) => a + q.n, 0);
+  const total = o.drink + incTotal;
+  const handedOut = rider.gaveRound === room.round.roundId;
+  return (
+    <div className="hr-resbadge hr-glass" style={{ borderColor: won ? C.tote : total ? "rgba(224,82,82,.7)" : undefined }}>
+      <div className="hr-display hr-resbadge-big" style={{ color: won ? C.tote : total ? "#FF8A8A" : C.chalk }}>
+        {won ? `🏆 Give out ${o.give} sips` : total ? `🍺 Drink ${total} sips` : bet ? "😅 Safe this round" : "😶 Sat this one out"}
+      </div>
+      {incTotal > 0 && (
+        <div className="hr-resbadge-sub" style={{ color: "#FFB0B0" }}>
+          {o.drink > 0 && <>{o.drink} for your bet + </>}
+          {incoming.map((q) => `${q.n} from ${q.from}`).join(", ")}
+        </div>
+      )}
+      {won && !handedOut && <div className="hr-resbadge-sub" style={{ color: C.chalk }}>Pick who drinks below ↓</div>}
+      {won && incTotal > 0 && <div className="hr-resbadge-sub" style={{ color: "#FFB0B0" }}>…and you drink {incTotal}</div>}
+    </div>
+  );
+}
+
+/* the room's standings by races won — shown while bets are open */
+function Leaderboard({ players, meId }) {
+  const rows = [...players].sort((a, b) => (b.wins || 0) - (a.wins || 0) || (a.joinedAt || 0) - (b.joinedAt || 0));
+  if (!rows.length) return null;
+  const anyWins = rows.some((p) => (p.wins || 0) > 0);
+  return (
+    <div style={{ marginTop: 18, background: C.turf, border: `1px solid ${C.rail}`, borderRadius: 14, padding: "12px 14px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>
+        <span>🏆 Leaderboard</span><span>Wins</span>
+      </div>
+      {!anyWins && <div style={{ color: C.chalkDim, fontStyle: "italic", fontSize: 14, marginBottom: 6 }}>Nobody has backed a winner yet.</div>}
+      {rows.map((p, i) => {
+        const w = p.wins || 0;
+        const me = p.id === meId;
+        return (
+          <div key={p.id} style={{ display: "grid", gridTemplateColumns: "26px 1fr auto", alignItems: "center", gap: 8, padding: "6px 4px", borderTop: i ? `1px dashed ${C.rail}` : "none", fontSize: 16 }}>
+            <span style={{ color: C.chalkDim, fontWeight: 700 }}>{anyWins ? i + 1 : "–"}</span>
+            <span style={{ fontWeight: me ? 800 : 500, color: me ? C.tote : C.chalk }}>{p.name}{me ? " (you)" : ""}</span>
+            <span className="hr-display" style={{ fontSize: 22, color: w ? C.tote : C.chalkDim }}>{w}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function RiderResults({ rider, room, roster, compact = false }) {
   const { id, suit, drinks, betPlaced, alloc, setAlloc, gaveRound, setGaveRound, lockGives } = rider;
   const bet = betPlaced ? { suit, drinks } : null;
   const o = outcome(bet, room.round.winner);
@@ -946,6 +1003,7 @@ function RiderResults({ rider, room, roster }) {
   const gavesLocked = gaveRound === room.round.roundId;
   return (
     <div>
+      {!compact && (<>
       <div className="hr-chip" style={{ marginTop: 16, textAlign: "center", background: won ? "rgba(240,194,75,.15)" : C.turf, border: `2px solid ${won ? C.tote : C.rail}`, borderRadius: 16, padding: 22 }}>
         <div style={{ fontSize: 44 }}>{won ? "🏆" : bet ? "🍺" : "😶"}</div>
         <div className="hr-display" style={{ fontSize: 26, color: won ? C.tote : C.chalk }}>{o.label}</div>
@@ -961,6 +1019,7 @@ function RiderResults({ rider, room, roster }) {
           Total damage: <b style={{ color: C.red }}>{o.drink + incTotal} sips</b>
         </div>
       )}
+      </>)}
 
       {won && !gavesLocked && (
         <div style={{ marginTop: 18 }}>
@@ -1351,7 +1410,9 @@ function HostView({ name, resumeCode, onExit }) {
       {/* one track for every phase, so the 3D scene carries on between them.
           On a phone held sideways during a race it takes over the whole screen. */}
       <div className={stage ? "hr-landstage" : undefined}>
-        <Track round={room.round} racing={room.phase === "race"} rules={room.rules} fill={stage} />
+        <Track round={room.round} racing={room.phase === "race"} rules={room.rules} fill={stage}>
+          {room.phase === "results" && <ResultBadge rider={rider} room={room} roster={players} />}
+        </Track>
         {stage && (
           <>
             {rider.betPlaced && (
@@ -1395,6 +1456,7 @@ function HostView({ name, resumeCode, onExit }) {
           {/* the host's own bet */}
           {room.phase === "betting" && (
             <div style={{ marginTop: 18 }}>
+              {room.round.roundId > 1 && <div style={{ marginBottom: 18 }}><Leaderboard players={players} meId={rider.id} /></div>}
               {!rider.betPlaced ? (
                 <BetForm rider={rider} />
               ) : (
@@ -1471,7 +1533,7 @@ function HostView({ name, resumeCode, onExit }) {
       {room.phase === "results" && (
         <>
           {/* the host's own result + sip hand-out */}
-          <RiderResults rider={rider} room={room} roster={players} />
+          <RiderResults rider={rider} room={room} roster={players} compact />
 
           <div style={{ margin: "16px 0" }}>
             <div style={{ fontSize: 13, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>
@@ -1756,7 +1818,7 @@ function PlayerView({ code, name, onExit }) {
 
   // during results, watch the full roster (to pick targets + see sips sent to you)
   useEffect(() => {
-    if (room?.phase !== "results") return;
+    if (room?.phase !== "results" && room?.phase !== "betting") return;
     let live = true;
     const load = async () => {
       const ps = await loadRoster(code);
@@ -1799,10 +1861,13 @@ function PlayerView({ code, name, onExit }) {
           <button className="hr-btn" style={{ background: "transparent", color: C.chalkDim, fontSize: 14 }} onClick={() => rider.setPlacedRound(0)}>Change bet</button>
         </div>
       )}
+      {room.phase === "betting" && room.round.roundId > 1 && <Leaderboard players={roster} meId={rider.id} />}
 
       {(room.phase === "race" || room.phase === "results") && (
         <div className={stage ? "hr-landstage" : undefined}>
-          <Track round={room.round} racing={room.phase === "race"} rules={room.rules} fill={stage} />
+          <Track round={room.round} racing={room.phase === "race"} rules={room.rules} fill={stage}>
+            {room.phase === "results" && <ResultBadge rider={rider} room={room} roster={roster} />}
+          </Track>
           {stage && (
             <>
               {rider.betPlaced && (
@@ -1830,7 +1895,7 @@ function PlayerView({ code, name, onExit }) {
 
       {room.phase === "results" && (
         <div>
-          <RiderResults rider={rider} room={room} roster={roster} />
+          <RiderResults rider={rider} room={room} roster={roster} compact />
           <p style={{ color: C.chalkDim, fontSize: 14, textAlign: "center", animation: "pulse 1.6s infinite", marginTop: 14 }}>
             Waiting for the host to start the next race…
           </p>
