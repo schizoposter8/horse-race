@@ -337,7 +337,7 @@ function Styles() {
       .hr-resume{display:flex;justify-content:center;margin-top:14px}
       .hr-linkbtn{flex-shrink:0;background:none;border:none;color:#0F3D26;font-family:inherit;font-size:15px;font-weight:800;letter-spacing:.03em;cursor:pointer;padding:10px 6px;text-shadow:0 1px 0 rgba(255,255,255,.65)}
       .hr-linkbtn:disabled{opacity:.35;cursor:default}
-      .hr-strip{position:relative;margin-top:auto;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:center;text-align:center;padding:13px 18px;border-top:1px solid rgba(18,58,38,.14);background:rgba(255,255,255,.84);font-size:14px;letter-spacing:.07em;text-transform:uppercase;color:#123A26}
+      .hr-strip{position:relative;margin-top:auto;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:center;text-align:center;padding:13px 18px;border-top:1px solid rgba(18,58,38,.14);background:rgba(255,255,255,.84);font-size:20px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#123A26}
       .hr-strip b{color:#EFC44F}
       .hr-striplead{color:#EFC44F;font-weight:800;letter-spacing:.12em}
       .hr-foot{text-align:center;font-size:12px;color:rgba(241,228,196,.4);margin:18px 0 0;letter-spacing:.06em}
