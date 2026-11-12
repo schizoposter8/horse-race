@@ -37,7 +37,9 @@ const X0 = 15.3;        // where a horse stands at the gate (step 0)
 const STEP = 4.35;      // distance covered by one card
 const stepX = (k) => X0 - k * STEP;
 const WIRE_X = stepX(6.5);
-const HORSE_SCALE = { S: 1, H: 1, D: 1, C: 1.18 };
+// the Clubs photo is a wider crop; it needs a size bump on the race camera but
+// not on the start page, where it already runs in the lane nearest the camera
+const HORSE_SCALE = { home: { S: 1, H: 1, D: 1, C: 0.94 }, race: { S: 1, H: 1, D: 1, C: 1.18 } };
 
 /** Point d units along the lap, shifted `off` units outward. Also returns the
  *  direction of travel (tx, tz) and the outward direction (nx, nz). */
@@ -536,7 +538,7 @@ function createScene(host, imgs, live) {
       const side = -(p.tx * right.x + p.tz * right.z);   // horses travel against d
       if (Math.abs(side) > 0.16) h.facing = side > 0 ? 1 : -1;
 
-      const hgt = (home ? HORSE_H.home : HORSE_H.race) * HORSE_SCALE[s];
+      const hgt = (home ? HORSE_H.home : HORSE_H.race) * (home ? HORSE_SCALE.home : HORSE_SCALE.race)[s];
       h.mesh.position.copy(h.pos);
       h.mesh.scale.set(h.facing * hgt * h.aspect, hgt, 1);
       h.mesh.rotation.y = Math.atan2(camPos.x - p.x, camPos.z - p.z);
