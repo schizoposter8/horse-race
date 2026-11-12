@@ -602,10 +602,15 @@ function createScene(host, imgs, live) {
       // back just far enough to keep the whole straight in frame
       const elev = 0.5;
       const half = 21.2;                                     // half the width to keep in view
-      const dist = half / (Math.tan((camera.fov * Math.PI) / 360) * camera.aspect);
+      // on very wide screens fitting the width alone would crop the near rail, so
+      // never come closer than the distance that keeps the track's full depth in view
+      const dist = Math.max(half / (Math.tan((camera.fov * Math.PI) / 360) * camera.aspect), 26.5);
       const cx = 0.3 + Math.sin(now * 0.13) * 0.5;           // a slow, small drift
-      wantLook.set(cx, 4.4, R + 2.4);
-      wantPos.set(cx, 4.4 + Math.sin(elev) * dist, R + 2.4 - Math.cos(elev) * dist);
+      // "lift" aims the camera higher, which drops the track lower in the frame and
+      // leaves the top for scenery (and for anything floating over the picture)
+      const ly = 4.4 + (live.current.lift || 0);
+      wantLook.set(cx, ly, R + 2.4);
+      wantPos.set(cx, ly + Math.sin(elev) * dist, R + 2.4 - Math.cos(elev) * dist);
       rate = 1.7;
     }
     const k = snap ? 1 : 1 - Math.exp(-dt * rate);
@@ -634,10 +639,10 @@ function createScene(host, imgs, live) {
 
 /** Fills its parent, which must be positioned and have a size.
  *  onFail is called if this device cannot draw 3D, so the caller can fall back. */
-export default function RaceScene({ mode = "race", imgs, round, racing, onFail }) {
+export default function RaceScene({ mode = "race", imgs, round, racing, lift = 0, onFail }) {
   const hostRef = useRef(null);
-  const live = useRef({ mode, round, racing });
-  live.current = { mode, round, racing };
+  const live = useRef({ mode, round, racing, lift });
+  live.current = { mode, round, racing, lift };
   useEffect(() => {
     let api = null;
     try {
