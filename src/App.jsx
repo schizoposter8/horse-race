@@ -536,24 +536,88 @@ function DrawnCard({ round, big = false, size = 0 }) {
   );
 }
 
-/* ---------------- next-card odds ----------------
-   Worked out only from cards the whole room has seen (cards drawn + track cards
-   already flipped), never from the hidden deck order or face-down track cards. */
-function nextCardOdds(round) {
-  const seen = { S: 0, H: 0, D: 0, C: 0 };
-  for (let i = 0; i < round.drawIdx; i++) seen[round.deck[i].slice(-1)] += 1;
-  for (let i = 0; i < round.flipped; i++) seen[round.trackSuits[i].slice(-1)] += 1;
-  const unseen = 48 - round.drawIdx - round.flipped;
-  const out = {};
-  SUIT_KEYS.forEach((s) => { out[s] = unseen > 0 ? Math.round(((12 - seen[s]) / unseen) * 100) : 0; });
-  return out;
+/* ---------------- win odds ----------------
+   Each horse's chance of winning from here, found by playing the rest of the
+   race out a few thousand times. It uses only what the whole room has seen
+   (horse positions, cards drawn, track cards already flipped). The unseen cards
+   are shuffled afresh for every play-through, so the hidden deck order and the
+   face-down track cards are never used and nothing leaks. The shuffles are
+   seeded from the race state, so every screen shows the same numbers. */
+const WIN_SIMS = 8000;
+let winOddsCache = { key: "", odds: null };
+
+function winOdds(round) {
+  const key = `${round.roundId}:${round.drawIdx}:${round.flipped}:${round.winner || ""}`;
+  if (winOddsCache.key === key) return winOddsCache.odds;
+
+  const odds = { S: 0, H: 0, D: 0, C: 0 };
+  if (round.winner) {
+    odds[round.winner] = 100;
+  } else if (round.drawIdx === 0) {
+    // nothing has happened yet, so by symmetry it is an even race
+    SUIT_KEYS.forEach((s2) => { odds[s2] = 25; });
+  } else {
+    // the cards nobody has seen yet, by suit
+    const seen = [0, 0, 0, 0];
+    const idx = { S: 0, H: 1, D: 2, C: 3 };
+    for (let i = 0; i < round.drawIdx; i++) seen[idx[round.deck[i].slice(-1)]] += 1;
+    for (let i = 0; i < round.flipped; i++) seen[idx[round.trackSuits[i].slice(-1)]] += 1;
+    const unseen = [];
+    for (let k = 0; k < 4; k++) for (let n = seen[k]; n < 12; n++) unseen.push(k);
+    const start = SUIT_KEYS.map((s) => round.positions[s]);
+    const faceDown = TRACK_LEN - round.flipped;
+
+    // small seeded generator (mulberry32)
+    let seed = (round.roundId * 100003 + round.drawIdx * 1009 + round.flipped * 31 + 7) >>> 0;
+    const rnd = () => {
+      seed = (seed + 0x6D2B79F5) >>> 0;
+      let t = seed;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+
+    const wins = [0, 0, 0, 0];
+    const cards = unseen.slice();
+    const pos = [0, 0, 0, 0];
+    for (let sim = 0; sim < WIN_SIMS; sim++) {
+      for (let i = cards.length - 1; i > 0; i--) {
+        const j = Math.floor(rnd() * (i + 1));
+        const tmp = cards[i]; cards[i] = cards[j]; cards[j] = tmp;
+      }
+      // the first few shuffled cards stand in for the face-down track cards,
+      // the rest are the draw pile — then the race is run by the normal rules
+      pos[0] = start[0]; pos[1] = start[1]; pos[2] = start[2]; pos[3] = start[3];
+      let flipped = 0;
+      for (let d = faceDown; d < cards.length; d++) {
+        const c = cards[d];
+        pos[c] += 1;
+        if (pos[c] > TRACK_LEN) { wins[c] += 1; break; }
+        while (flipped < faceDown && Math.min(pos[0], pos[1], pos[2], pos[3]) >= round.flipped + flipped + 1) {
+          const f = cards[flipped];
+          pos[f] = Math.max(0, pos[f] - 1);
+          flipped += 1;
+        }
+      }
+    }
+
+    // whole percentages that add up to exactly 100
+    const total = wins[0] + wins[1] + wins[2] + wins[3] || 1;
+    const raw = wins.map((w) => (w / total) * 100);
+    const pct = raw.map(Math.floor);
+    let left = 100 - (pct[0] + pct[1] + pct[2] + pct[3]);
+    raw.map((v, i) => [v - pct[i], i]).sort((x, y) => y[0] - x[0]).forEach(([, i]) => { if (left > 0) { pct[i] += 1; left -= 1; } });
+    SUIT_KEYS.forEach((s2, i) => { odds[s2] = pct[i]; });
+  }
+  winOddsCache = { key, odds };
+  return odds;
 }
 
 function OddsRow({ round, label = true }) {
-  const odds = nextCardOdds(round);
+  const odds = winOdds(round);
   return (
     <div className="hr-odds">
-      {label && <span style={{ flexBasis: "100%", textAlign: "center", fontSize: 12, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".1em" }}>Chance the next card is</span>}
+      {label && <span style={{ flexBasis: "100%", textAlign: "center", fontSize: 12, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".1em" }}>Chance to win</span>}
       {SUIT_KEYS.map((s) => (
         <span key={s} className="hr-oddpill">
           <span style={{ color: SUITS[s].red ? C.red : C.chalk, fontSize: 16, lineHeight: 1 }}>{SUITS[s].sym}</span>
@@ -1470,7 +1534,7 @@ function BigScreenView({ code, onExit }) {
     room.phase === "betting" ? "Bets open" :
     room.phase === "race" ? "🏇 They're racing!" : "Results";
 
-  const odds = nextCardOdds(room.round);
+  const odds = winOdds(room.round);
 
   return (
     <div>
@@ -1519,7 +1583,7 @@ function BigScreenView({ code, onExit }) {
             )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "end", fontSize: 14, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".12em", marginBottom: 9, padding: "0 4px" }}>
               <span>{room.phase === "results" ? "The damage" : "The betting board"}</span>
-              <span style={{ textAlign: "right" }}>{room.phase === "race" ? "Next card" : "🏆 Wins"}</span>
+              <span style={{ textAlign: "right" }}>{room.phase === "race" ? "Win chance" : "🏆 Wins"}</span>
             </div>
             {/* during the race: one row per suit, showing who's riding it and for how many sips */}
             {room.phase === "race" && SUIT_KEYS.map((s) => {
