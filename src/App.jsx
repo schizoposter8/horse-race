@@ -1,10 +1,18 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { sGet, sSet, sList, loadRoster, subscribeKey, subscribePrefix } from "./storage.js";
 import {
   spotifyConfigured, spotifyHasToken, spotifyLogin, spotifyLogout, spotifyHandleRedirect,
   startSpeaker, parseSpotifyLink, playOnDevice,
   THEME_TRACK_URI, setRepeatTrack, findTrackUri,
 } from "./spotify.js";
+
+// The 3D track loads as its own chunk. If it cannot load, or the device cannot
+// draw 3D, the caller is told and falls back to the flat version.
+function Scene3DUnavailable({ onFail }) {
+  useEffect(() => { if (onFail) onFail(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+const RaceScene = lazy(() => import("./Track3D.jsx").catch(() => ({ default: Scene3DUnavailable })));
 
 /* ------------------------------------------------------------------ */
 /*  HORSE RACE — multiplayer card drinking game (Quiplash-style join)  */
@@ -76,136 +84,18 @@ const sfx = (() => {
   };
 })();
 
-/* ---------------- race caller ----------------
-   Browser speech for now. To swap in real recorded lines later, keep these same
-   call sites and replace say() with an <audio> play of a matching mp3 from
-   /public/audio — the line pools below double as the recording script. */
-
-const CALLS = {
-  break: [
-    "And they're off! {S} breaks first!",
-    "Here we go — {S} jumps out in front!",
-    "{S} grabs the early lead!",
-    "{S} shows the way out of the gate!",
-  ],
-  lead: [
-    "Ohhh my — {S} takes the lead!",
-    "Look out! {S} surges to the front!",
-    "And now it's {S} in front!",
-    "{S} storms past and grabs the lead!",
-    "Here comes {S}! {S} has taken over!",
-  ],
-  steal: [
-    "{O} stumbles — and {S} takes over!",
-    "Disaster for {O}! {S} inherits the lead!",
-    "{O} falls back, and {S} pounces!",
-    "Oh no, {O} is in trouble — it's {S} in front!",
-  ],
-  win: [
-    "And {S} takes the crown!!",
-  ],
-};
-
-const announcer = (() => {
-  let enabled = true;
-  let voice = null;
-  let picked = false;
-  let lastSpoke = 0;
-  let pending = null;
-
-  const synth = () => (typeof window !== "undefined" ? window.speechSynthesis : null);
-
-  // prefer a fuller en-US voice; browsers load the list asynchronously
-  function chooseVoice() {
-    const s = synth();
-    if (!s || picked) return;
-    const all = s.getVoices();
-    if (!all.length) return;
-    const want = ["Google US English", "Microsoft Guy", "Microsoft David", "Daniel", "Alex", "Fred"];
-    voice = want.map((n) => all.find((v) => v.name.includes(n))).find(Boolean)
-      || all.find((v) => v.lang === "en-US") || all.find((v) => v.lang && v.lang.startsWith("en")) || null;
-    picked = true;
-  }
-
-  function say(text) {
-    const s = synth();
-    if (!s || !enabled) return;
-    chooseVoice();
-    try {
-      s.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      if (voice) u.voice = voice;
-      u.rate = 1.14;   // a shade quick, like a live call
-      u.pitch = 1.18;  // lifted for excitement
-      u.volume = 1;
-      s.speak(u);
-    } catch { /* speech unavailable — stay silent */ }
-  }
-
-  return {
-    setEnabled(v) {
-      enabled = v;
-      if (!v) {
-        clearTimeout(pending);
-        try { const s = synth(); if (s) s.cancel(); } catch { /* fine */ }
-      }
-    },
-    isEnabled() { return enabled; },
-    prime() {
-      const s = synth();
-      if (!s) return;
-      chooseVoice();
-      if (!picked && s.addEventListener) s.addEventListener("voiceschanged", chooseVoice, { once: true });
-    },
-    /** kind: break | lead | steal | win. force skips the cooldown (used for the win). */
-    call(kind, { suit, old, delay = 1600, force = false } = {}) {
-      if (!enabled) return;
-      const now = Date.now();
-      if (!force && now - lastSpoke < 8000) return;   // never machine-gun
-      lastSpoke = now;
-      const pool = CALLS[kind];
-      let line = pool[Math.floor(Math.random() * pool.length)];
-      line = line.split("{S}").join(SUITS[suit].name);
-      if (old) line = line.split("{O}").join(SUITS[old].name);
-      clearTimeout(pending);
-      pending = setTimeout(() => say(line), delay);
-    },
-  };
-})();
-
-function AnnouncerToggle() {
-  const [on, setOn] = useState(announcer.isEnabled());
-  return (
-    <button
-      aria-label={on ? "Mute the race caller" : "Unmute the race caller"}
-      onClick={() => { announcer.setEnabled(!on); setOn(!on); }}
-      style={{
-        position: "fixed", top: 10, right: 60, zIndex: 50,
-        width: 42, height: 42, borderRadius: "50%",
-        background: C.turf, border: `2px solid ${C.rail}`, color: C.chalk,
-        fontSize: 18, cursor: "pointer", opacity: on ? 1 : .45,
-      }}
-    >
-      🎙️
-    </button>
-  );
-}
-
 /**
  * Watches room state and fires draw / flip / everyone-drinks / result sounds.
  * myWin: true → win fanfare at results, false → sad trombone,
  * "spect" → fanfare (host & big screen), null → silent at results.
  */
-function useRaceSfx(room, myWin = "spect", announce = false) {
+function useRaceSfx(room, myWin = "spect") {
   const prev = useRef({ draw: -1, flipped: -1, phase: null, roundId: null });
-  // the suit the caller last named as leader; null until someone is clearly clear
-  const spokenLeader = useRef(null);
   useEffect(() => {
     if (!room) return;
     const rd = room.round;
     const p = prev.current;
     if (p.roundId !== rd.roundId) {
-      spokenLeader.current = null;   // fresh race, fresh storyline
       prev.current = { draw: rd.drawIdx, flipped: rd.flipped, phase: room.phase, roundId: rd.roundId };
       return;
     }
@@ -220,30 +110,14 @@ function useRaceSfx(room, myWin = "spect", announce = false) {
         }, 1400);
       }
 
-      if (announce) {
-        // a leader only counts when alone out front — ties stay silent
-        const best = Math.max(...SUIT_KEYS.map((s) => rd.positions[s]));
-        const atTop = SUIT_KEYS.filter((s) => rd.positions[s] === best);
-        const leader = best > 0 && atTop.length === 1 ? atTop[0] : null;
-        if (leader && leader !== spokenLeader.current) {
-          const wasLeader = spokenLeader.current;
-          // a track card knocking the old leader back is the best call of the lot
-          const stolen = wasLeader && rd.flipped > p.flipped && rd.lastFlip === wasLeader;
-          if (!wasLeader) announcer.call("break", { suit: leader });
-          else if (stolen) announcer.call("steal", { suit: leader, old: wasLeader, delay: 2600 });
-          else announcer.call("lead", { suit: leader });
-          spokenLeader.current = leader;
-        }
-      }
     }
     if (room.phase === "results" && p.phase !== "results") {
-      if (announce && rd.winner) announcer.call("win", { suit: rd.winner, delay: 900, force: true });
       if (myWin === true) sfx.win();
       else if (myWin === false) sfx.lose();
       else if (myWin === "spect") sfx.win();
     }
     prev.current = { draw: rd.drawIdx, flipped: rd.flipped, phase: room.phase, roundId: rd.roundId };
-  }, [room, myWin, announce]);
+  }, [room, myWin]);
 }
 
 function SoundToggle() {
@@ -355,6 +229,7 @@ function Styles() {
       .hbody-run{animation:hbob .45s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
       .hstumble{animation:hstumble .7s ease}
       .hwin{animation:hrear 1.4s ease;transform-box:fill-box;transform-origin:30% 90%}
+      .hr-t3d{position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:linear-gradient(180deg,#8CCAF0 0%,#CFE8F8 42%,#4E9E57 42%,#3F8A4B 100%)}
       .hr-root{min-height:100vh;background:${C.turfDeep};color:${C.chalk};font-family:ui-rounded,'Segoe UI',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
       .hr-wrap{max-width:520px;margin:0 auto;padding:20px 16px 48px}
       .hr-bigwrap{max-width:1600px;margin:0 auto;padding:24px 24px 48px}
@@ -435,17 +310,6 @@ function Styles() {
       .hr-scrim{position:absolute;left:0;right:0;top:0;height:236px;background:linear-gradient(180deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.2) 58%,#E9F3FB 100%)}
       @media(min-width:900px){ .hr-scrim{height:100%;background:linear-gradient(180deg,rgba(255,255,255,.62) 0%,rgba(255,255,255,.46) 30%,rgba(255,255,255,.3) 50%,rgba(255,255,255,.06) 70%,rgba(255,255,255,0) 82%)} }
       .hr-content{position:relative;flex:1;margin:196px auto 0;max-width:460px;padding:4px 18px 28px;text-align:center}
-      @media(min-width:900px){
-        .hr-content{margin:0 auto;max-width:940px;padding:6vh 24px 4vh}
-        .hr-namewrap{max-width:440px;margin:0 auto 20px}
-        .hr-actions{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
-        .hr-card{background:rgba(255,253,246,.88);border:1.5px solid rgba(18,58,38,.2);border-radius:20px;padding:22px 20px 20px;box-shadow:0 16px 38px rgba(18,50,34,.22);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
-        .hr-card + .hr-card{margin-top:0}
-        .hr-cardlabel{display:block;font-size:13px;letter-spacing:.2em;text-transform:uppercase;font-weight:800;color:#2F7C46;margin-bottom:14px}
-        .hr-cta{font-size:20px;padding:18px 20px}
-        .hr-pill{margin:0 0 12px}
-        .hr-note{margin:10px 0 0}
-      }
       .hr-mark{font-size:17px;letter-spacing:.17em;text-transform:uppercase;font-weight:800;color:#8A5A16;text-shadow:0 1px 0 rgba(255,255,255,.6)}
       .hr-h1{font-size:clamp(42px,8.5vw,72px);line-height:.9;margin:10px 0 12px;color:#0E3A24;text-shadow:0 2px 0 rgba(255,255,255,.6)}
       .hr-sub{margin:0 0 20px;font-size:16px;line-height:1.5;color:#F1E6CD}
@@ -477,6 +341,18 @@ function Styles() {
       .hr-strip b{color:#EFC44F}
       .hr-striplead{color:#EFC44F;font-weight:800;letter-spacing:.12em}
       .hr-foot{text-align:center;font-size:12px;color:rgba(241,228,196,.4);margin:18px 0 0;letter-spacing:.06em}
+      /* desktop landing layout — kept last so it wins over the phone rules above */
+      @media(min-width:900px){
+        .hr-content{margin:0 auto;max-width:940px;padding:6vh 24px 4vh}
+        .hr-namewrap{max-width:440px;margin:0 auto 20px}
+        .hr-actions{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+        .hr-card{background:rgba(255,253,246,.88);border:1.5px solid rgba(18,58,38,.2);border-radius:20px;padding:22px 20px 20px;box-shadow:0 16px 38px rgba(18,50,34,.22);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
+        .hr-card + .hr-card{margin-top:0}
+        .hr-cardlabel{display:block;font-size:13px;letter-spacing:.2em;text-transform:uppercase;font-weight:800;color:#2F7C46;margin-bottom:14px}
+        .hr-cta{font-size:20px;padding:18px 20px}
+        .hr-pill{margin:0 0 12px}
+        .hr-note{margin:10px 0 0}
+      }
       @media (prefers-reduced-motion: reduce){ *{animation:none !important;transition:none !important} }
     `}</style>
   );
@@ -642,6 +518,7 @@ function DrawnCard({ round, big = false }) {
 /* ---------------- the track ---------------- */
 
 function Track({ round, racing, rules, big = false }) {
+  const [flat, setFlat] = useState(false);   // true once 3D proves unavailable
   if (!round) return null;
   const cols = TRACK_LEN + 2; // gate + 6 + finish
   const sz = big
@@ -671,6 +548,14 @@ function Track({ round, racing, rules, big = false }) {
           </div>
         </div>
       )}
+      {!flat && (
+        <div className="hr-t3d">
+          <Suspense fallback={null}>
+            <RaceScene mode="race" imgs={HORSE_IMGS} round={round} racing={racing} onFail={() => setFlat(true)} />
+          </Suspense>
+        </div>
+      )}
+      {flat && (<>
       {/* face-down track cards: each flips (3D) once ALL four horses reach its column */}
       <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols},1fr)`, gap: 4, marginBottom: 10 }}>
         <div />
@@ -751,6 +636,7 @@ function Track({ round, racing, rules, big = false }) {
           </div>
         );
       })}
+      </>)}
       {/* commentary line */}
       <div style={{ marginTop: 10, minHeight: 20, textAlign: "center", fontSize: sz.comm, color: C.chalkDim }}>
         {round.winner ? (
@@ -1033,7 +919,7 @@ function SpotifyPanel({ room, returnState, showSetupHint = false }) {
     const p = playerRef.current;
     if (!p || !customPlaying || !room) return;
     if (!room.round?.pendingAt && room.round?.drawIdx > 0) {
-      const t = setTimeout(() => p.setVolume(0.6).catch(() => {}), 3800);
+      const t = setTimeout(() => p.setVolume(0.6).catch(() => {}), 2600);
       return () => clearTimeout(t);
     }
   }, [room?.round?.drawIdx, room?.round?.pendingAt, customPlaying, room]);
@@ -1172,7 +1058,7 @@ function HostView({ name, resumeCode, onExit }) {
   // the host rides too: registered as a player, can bet and win like anyone
   const rider = useRider(code, name, room);
   const myWin = room?.phase === "results" ? (rider.betPlaced ? rider.suit === room.round.winner : "spect") : "spect";
-  useRaceSfx(room, myWin, true);
+  useRaceSfx(room, myWin);
 
   const writeRoom = useCallback(async (r) => {
     setRoom(r);
@@ -1292,9 +1178,11 @@ function HostView({ name, resumeCode, onExit }) {
         <span className="hr-display" style={{ fontSize: 34, letterSpacing: ".18em" }}>{room.code}</span>
       </div>
 
+      {/* one track for every phase, so the 3D scene carries on between them */}
+      <Track round={room.round} racing={room.phase === "race"} rules={room.rules} />
+
       {(room.phase === "lobby" || room.phase === "betting") && (
         <>
-          <Track round={room.round} racing={false} rules={room.rules} />
 
           {/* house rule toggle */}
           <button
@@ -1370,7 +1258,6 @@ function HostView({ name, resumeCode, onExit }) {
 
       {room.phase === "race" && (
         <>
-          <Track round={room.round} racing rules={room.rules} />
           <div style={{ display: "flex", gap: 14, alignItems: "center", marginTop: 14 }}>
             <DrawnCard round={room.round} />
             <div style={{ flex: 1 }}>
@@ -1395,8 +1282,6 @@ function HostView({ name, resumeCode, onExit }) {
 
       {room.phase === "results" && (
         <>
-          <Track round={room.round} racing={false} rules={room.rules} />
-
           {/* the host's own result + sip hand-out */}
           <RiderResults rider={rider} room={room} roster={players} />
 
@@ -1450,7 +1335,7 @@ function BigScreenView({ code, onExit }) {
   const [players, setPlayers] = useState([]);
   const [gone, setGone] = useState(false);
 
-  useRaceSfx(room, "spect", true);
+  useRaceSfx(room);
 
   // poll room
   useEffect(() => {
@@ -1709,9 +1594,12 @@ function PlayerView({ code, name, onExit }) {
         </div>
       )}
 
+      {(room.phase === "race" || room.phase === "results") && (
+        <Track round={room.round} racing={room.phase === "race"} rules={room.rules} />
+      )}
+
       {room.phase === "race" && (
         <>
-          <Track round={room.round} racing rules={room.rules} />
           <div style={{ display: "flex", gap: 16, alignItems: "center", justifyContent: "center", marginTop: 14 }}>
             <DrawnCard round={room.round} />
             {rider.betPlaced && (
@@ -1725,7 +1613,6 @@ function PlayerView({ code, name, onExit }) {
 
       {room.phase === "results" && (
         <div>
-          <Track round={room.round} racing={false} rules={room.rules} />
           <RiderResults rider={rider} room={room} roster={roster} />
           <p style={{ color: C.chalkDim, fontSize: 14, textAlign: "center", animation: "pulse 1.6s infinite", marginTop: 14 }}>
             Waiting for the host to start the next race…
@@ -1749,11 +1636,12 @@ export default function App() {
   const [joinCode, setJoinCode] = useState("");
   const [name, setName] = useState("");
   const [resumeCode, setResumeCode] = useState("");
+  const [flatHome, setFlatHome] = useState(false);
   const exit = () => { setScreen("home"); setJoinCode(""); setResumeCode(""); };
 
   // unlock audio on the first tap anywhere (browser autoplay policy)
   useEffect(() => {
-    const h = () => { sfx.unlock(); announcer.prime(); };
+    const h = () => { sfx.unlock(); };
     window.addEventListener("pointerdown", h, { once: true });
     return () => window.removeEventListener("pointerdown", h);
   }, []);
@@ -1774,7 +1662,6 @@ export default function App() {
     <div className="hr-root">
       <Styles />
       <SoundToggle />
-      <AnnouncerToggle />
       {screen === "home" && (
         <div className="hr-homewrap">
           <div className="hr-hero">
@@ -1795,6 +1682,13 @@ export default function App() {
                 <img key={h.s} className="hr-heroHorse" src={HORSE_IMGS[h.s]} alt=""
                   style={{ animationDelay: h.delay }} />
               ))}
+              {/* the 3D track covers the painted scene once it is ready; if 3D
+                  is unavailable the painted scene simply stays */}
+              {!flatHome && (
+                <Suspense fallback={null}>
+                  <RaceScene mode="home" imgs={HORSE_IMGS} onFail={() => setFlatHome(true)} />
+                </Suspense>
+              )}
               {CONFETTI.map((c, i) => (
                 <span key={i} className="hr-speck" style={{
                   left: `${c.left}%`, top: `${c.top}%`, background: c.color,
