@@ -601,12 +601,45 @@ function winOdds(round) {
       }
     }
 
-    // whole percentages that add up to exactly 100
     const total = wins[0] + wins[1] + wins[2] + wins[3] || 1;
     const raw = wins.map((w) => (w / total) * 100);
-    const pct = raw.map(Math.floor);
-    let left = 100 - (pct[0] + pct[1] + pct[2] + pct[3]);
-    raw.map((v, i) => [v - pct[i], i]).sort((x, y) => y[0] - x[0]).forEach(([, i]) => { if (left > 0) { pct[i] += 1; left -= 1; } });
+
+    // 1. horses in exactly the same spot (same step, same number of their
+    //    cards still unseen) have exactly the same chance, so average them
+    const left = [0, 0, 0, 0];
+    unseen.forEach((k) => { left[k] += 1; });
+    const sig = [0, 1, 2, 3].map((k) => `${start[k]}:${left[k]}`);
+    const fair = raw.map((v, k) => {
+      const same = [0, 1, 2, 3].filter((j) => sig[j] === sig[k]);
+      return same.reduce((a, j) => a + raw[j], 0) / same.length;
+    });
+
+    // 2. horses within about a point of each other count as tied and show the
+    //    same number (a group never spans more than 1.5 points)
+    const order = [0, 1, 2, 3].sort((x, y) => fair[y] - fair[x]);
+    const groups = [];
+    order.forEach((k) => {
+      const g = groups[groups.length - 1];
+      if (g && fair[g[g.length - 1]] - fair[k] <= 1 && fair[g[0]] - fair[k] <= 1.5) g.push(k);
+      else groups.push([k]);
+    });
+
+    // 3. whole numbers; nobody shows less than 1% while the race is still on
+    const pct = [0, 0, 0, 0];
+    const gval = groups.map((g) => Math.max(1, Math.round(g.reduce((a, k) => a + fair[k], 0) / g.length)));
+    // nudge whole groups toward a total of 100 without breaking a tie or the 1% floor
+    let diff = gval.reduce((a, v, i) => a + v * groups[i].length, 0) - 100;
+    for (let pass = 0; pass < 8 && diff !== 0; pass++) {
+      const step = diff > 0 ? -1 : 1;
+      const i = groups
+        .map((g, j) => j)
+        .filter((j) => groups[j].length <= Math.abs(diff) && gval[j] + step >= 1)
+        .sort((x, y) => gval[y] - gval[x])[0];
+      if (i === undefined) break;
+      gval[i] += step;
+      diff += step * groups[i].length;
+    }
+    groups.forEach((g, i) => g.forEach((k) => { pct[k] = gval[i]; }));
     SUIT_KEYS.forEach((s2, i) => { odds[s2] = pct[i]; });
   }
   winOddsCache = { key, odds };
