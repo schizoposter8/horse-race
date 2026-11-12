@@ -229,7 +229,26 @@ function Styles() {
       .hbody-run{animation:hbob .45s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
       .hstumble{animation:hstumble .7s ease}
       .hwin{animation:hrear 1.4s ease;transform-box:fill-box;transform-origin:30% 90%}
-      .hr-t3d{position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:linear-gradient(180deg,#8CCAF0 0%,#CFE8F8 42%,#4E9E57 42%,#3F8A4B 100%)}
+      .hr-t3d{position:relative;width:100%;aspect-ratio:16/9;max-height:56vh;border-radius:10px;overflow:hidden;background:linear-gradient(180deg,#8CCAF0 0%,#CFE8F8 42%,#4E9E57 42%,#3F8A4B 100%)}
+      /* "fill" mode: the track takes over its whole container (TV stage, sideways phone) */
+      .hr-t3d-fill{position:absolute;inset:0;aspect-ratio:auto;max-height:none;border-radius:0}
+      .hr-fillcomm{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:3;margin:0;background:rgba(7,48,30,.8);padding:8px 20px;border-radius:999px;white-space:nowrap;max-width:92%;overflow:hidden;text-overflow:ellipsis}
+      .hr-fillbanner{position:absolute;left:50%;top:14px;transform:translateX(-50%);z-index:4;width:min(560px,70%)}
+      .hr-fillflat{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(92%,1100px)}
+      .hr-glass{background:rgba(7,48,30,.8);border:1px solid rgba(255,255,255,.16);border-radius:14px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+      .hr-stage{position:relative;height:100vh;height:100dvh;min-height:420px;overflow:hidden;background:${C.turfDeep}}
+      .hr-stage-board{position:absolute;left:14px;top:14px;z-index:3;width:min(340px,26vw);min-width:250px;max-height:calc(100% - 28px);overflow:auto;padding:12px;box-sizing:border-box}
+      .hr-stage-side{position:absolute;right:66px;top:14px;z-index:3;display:flex;flex-direction:column;align-items:flex-end;gap:12px}
+      .hr-landstage{position:fixed;inset:0;z-index:40;background:${C.turfDeep}}
+      .hr-landstage .hr-fillcomm{bottom:auto;top:10px;font-size:13px;padding:5px 14px}
+      .hr-landstage .hr-fillbanner{top:46px;width:min(380px,56%)}
+      .hr-land-tl{position:absolute;left:max(10px,env(safe-area-inset-left));top:10px;z-index:3;padding:6px 12px;font-size:13px}
+      .hr-land-bl{position:absolute;left:max(10px,env(safe-area-inset-left));bottom:10px;z-index:3}
+      .hr-land-br{position:absolute;right:max(10px,env(safe-area-inset-right));bottom:10px;z-index:3;display:flex;align-items:flex-end;gap:10px}
+      .hr-odds{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px 8px}
+      .hr-oddpill{display:inline-flex;align-items:center;gap:5px;background:rgba(7,48,30,.8);border:1px solid rgba(255,255,255,.16);border-radius:999px;padding:4px 10px;font-size:14px;font-weight:700}
+      .hr-rotatehint{display:none;text-align:center;font-size:13px;margin-top:8px}
+      @media (orientation:portrait) and (max-width:700px){ .hr-rotatehint{display:block} }
       .hr-root{min-height:100vh;background:${C.turfDeep};color:${C.chalk};font-family:ui-rounded,'Segoe UI',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
       .hr-wrap{max-width:520px;margin:0 auto;padding:20px 16px 48px}
       .hr-bigwrap{max-width:1600px;margin:0 auto;padding:24px 24px 48px}
@@ -452,13 +471,13 @@ function useCountdown(pendingAt) {
   return count;
 }
 
-function DrawnCard({ round, big = false }) {
+function DrawnCard({ round, big = false, size = 0 }) {
   const count = useCountdown(round.pendingAt);
   const cardStr = round.lastCard;
   const suit = cardStr ? cardStr.slice(-1) : null;
   const rank = cardStr ? cardStr.slice(0, -1) : "";
   const revealed = !round.pendingAt && !!cardStr;
-  const w = big ? 150 : 104;
+  const w = size || (big ? 150 : 104);
   const suitColor = suit && SUITS[suit].red ? C.red : C.ink;
   const face = {
     position: "absolute", inset: 0, borderRadius: 10,
@@ -468,9 +487,11 @@ function DrawnCard({ round, big = false }) {
   };
   return (
     <div style={{ width: w, flexShrink: 0 }}>
+      {!size && (
       <div style={{ fontSize: 11, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".12em", textAlign: "center", marginBottom: 6 }}>
         {round.pendingAt ? "Drawing…" : revealed ? "Last card" : "The deck"}
       </div>
+      )}
       <div style={{ position: "relative", width: "100%", aspectRatio: "3/4", perspective: "420px" }}>
         <div style={{
           position: "relative", width: "100%", height: "100%",
@@ -515,9 +536,52 @@ function DrawnCard({ round, big = false }) {
   );
 }
 
+/* ---------------- next-card odds ----------------
+   Worked out only from cards the whole room has seen (cards drawn + track cards
+   already flipped), never from the hidden deck order or face-down track cards. */
+function nextCardOdds(round) {
+  const seen = { S: 0, H: 0, D: 0, C: 0 };
+  for (let i = 0; i < round.drawIdx; i++) seen[round.deck[i].slice(-1)] += 1;
+  for (let i = 0; i < round.flipped; i++) seen[round.trackSuits[i].slice(-1)] += 1;
+  const unseen = 48 - round.drawIdx - round.flipped;
+  const out = {};
+  SUIT_KEYS.forEach((s) => { out[s] = unseen > 0 ? Math.round(((12 - seen[s]) / unseen) * 100) : 0; });
+  return out;
+}
+
+function OddsRow({ round, label = true }) {
+  const odds = nextCardOdds(round);
+  return (
+    <div className="hr-odds">
+      {label && <span style={{ flexBasis: "100%", textAlign: "center", fontSize: 12, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".1em" }}>Chance the next card is</span>}
+      {SUIT_KEYS.map((s) => (
+        <span key={s} className="hr-oddpill">
+          <span style={{ color: SUITS[s].red ? C.red : C.chalk, fontSize: 16, lineHeight: 1 }}>{SUITS[s].sym}</span>
+          {odds[s]}%
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/* true on a phone held sideways (short, wide screen) */
+function useLandscapePhone() {
+  const q = "(orientation: landscape) and (max-height: 540px)";
+  const [on, setOn] = useState(() => typeof window !== "undefined" && !!window.matchMedia && window.matchMedia(q).matches);
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+    const m = window.matchMedia(q);
+    const h = () => setOn(m.matches);
+    h();
+    if (m.addEventListener) m.addEventListener("change", h); else m.addListener(h);
+    return () => { if (m.removeEventListener) m.removeEventListener("change", h); else m.removeListener(h); };
+  }, []);
+  return on;
+}
+
 /* ---------------- the track ---------------- */
 
-function Track({ round, racing, rules, big = false }) {
+function Track({ round, racing, rules, big = false, fill = false, lift = 0 }) {
   const [flat, setFlat] = useState(false);   // true once 3D proves unavailable
   if (!round) return null;
   const cols = TRACK_LEN + 2; // gate + 6 + finish
@@ -532,14 +596,13 @@ function Track({ round, racing, rules, big = false }) {
     backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden",
   };
   return (
-    <div style={{
+    <div style={fill ? { position: "absolute", inset: 0 } : {
       background: C.turf, border: `2px solid ${C.rail}`, borderRadius: 16, padding: sz.pad,
-      // on phone/host/player views the track breaks out of the narrow column
-      // and spans most of the screen; big-screen mode manages its own layout
-      ...(big ? {} : { width: "min(96vw, 900px)", marginLeft: "50%", transform: "translateX(-50%)", boxSizing: "border-box" }),
+      // the track breaks out of the narrow column and spans nearly the whole window
+      width: "min(96vw, 1500px)", marginLeft: "50%", transform: "translateX(-50%)", boxSizing: "border-box",
     }}>
       {everyone && (
-        <div style={{ animation: "slidein .35s ease 1.5s both" }}>
+        <div className={fill ? "hr-fillbanner" : undefined} style={{ animation: "slidein .35s ease 1.5s both" }}>
           <div className="hr-display hr-shout" style={{
             background: C.tote, color: C.ink, textAlign: "center", borderRadius: 10,
             padding: big ? "12px 8px" : "7px 8px", fontSize: big ? 34 : 21, marginBottom: 12,
@@ -549,13 +612,13 @@ function Track({ round, racing, rules, big = false }) {
         </div>
       )}
       {!flat && (
-        <div className="hr-t3d">
+        <div className={fill ? "hr-t3d hr-t3d-fill" : "hr-t3d"}>
           <Suspense fallback={null}>
-            <RaceScene mode="race" imgs={HORSE_IMGS} round={round} racing={racing} onFail={() => setFlat(true)} />
+            <RaceScene mode="race" imgs={HORSE_IMGS} round={round} racing={racing} lift={lift} onFail={() => setFlat(true)} />
           </Suspense>
         </div>
       )}
-      {flat && (<>
+      {flat && (<div className={fill ? "hr-fillflat" : undefined}>
       {/* face-down track cards: each flips (3D) once ALL four horses reach its column */}
       <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols},1fr)`, gap: 4, marginBottom: 10 }}>
         <div />
@@ -636,9 +699,9 @@ function Track({ round, racing, rules, big = false }) {
           </div>
         );
       })}
-      </>)}
+      </div>)}
       {/* commentary line */}
-      <div style={{ marginTop: 10, minHeight: 20, textAlign: "center", fontSize: sz.comm, color: C.chalkDim }}>
+      <div className={fill ? "hr-fillcomm" : undefined} style={{ marginTop: fill ? 0 : 10, minHeight: 20, textAlign: "center", fontSize: sz.comm, color: C.chalkDim }}>
         {round.winner ? (
           <b style={{ color: C.tote }}>{SUITS[round.winner].sym} {SUITS[round.winner].name} wins!</b>
         ) : round.lastFlip ? (
@@ -651,6 +714,12 @@ function Track({ round, racing, rules, big = false }) {
           <span>Horses at the gate</span>
         )}
       </div>
+      {!fill && racing && (
+        <>
+          <div style={{ marginTop: 10 }}><OddsRow round={round} /></div>
+          <div className="hr-rotatehint" style={{ color: C.chalkDim }}>↻ Turn your phone sideways for the big view</div>
+        </>
+      )}
     </div>
   );
 }
@@ -1054,6 +1123,7 @@ function HostView({ name, resumeCode, onExit }) {
   const roomRef = useRef(null);
   roomRef.current = room;
   const awardedRef = useRef(0);
+  const landscape = useLandscapePhone();
 
   // the host rides too: registered as a player, can bet and win like anyone
   const rider = useRider(code, name, room);
@@ -1167,10 +1237,13 @@ function HostView({ name, resumeCode, onExit }) {
   const currentBets = players.filter((p) => p.roundId === room.round.roundId && p.suit);
   const betCount = currentBets.length;
   const flipDrink = !!room.rules?.flipDrink;
+  const stage = landscape && room.phase === "race";
 
   return (
     <div className="hr-wrap">
-      <ToteHeader sub={room.phase === "lobby" ? "Waiting for riders" : room.phase === "betting" ? "Bets open" : room.phase === "race" ? "You're the dealer" : "Results"} />
+      {room.phase !== "race" && (
+        <ToteHeader sub={room.phase === "lobby" ? "Waiting for riders" : room.phase === "betting" ? "Bets open" : "Results"} />
+      )}
 
       {/* room code banner */}
       <div style={{ background: C.tote, color: C.ink, borderRadius: 14, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
@@ -1178,8 +1251,26 @@ function HostView({ name, resumeCode, onExit }) {
         <span className="hr-display" style={{ fontSize: 34, letterSpacing: ".18em" }}>{room.code}</span>
       </div>
 
-      {/* one track for every phase, so the 3D scene carries on between them */}
-      <Track round={room.round} racing={room.phase === "race"} rules={room.rules} />
+      {/* one track for every phase, so the 3D scene carries on between them.
+          On a phone held sideways during a race it takes over the whole screen. */}
+      <div className={stage ? "hr-landstage" : undefined}>
+        <Track round={room.round} racing={room.phase === "race"} rules={room.rules} fill={stage} />
+        {stage && (
+          <>
+            {rider.betPlaced && (
+              <div className="hr-land-tl hr-glass">You: {SUITS[rider.suit].sym} {rider.drinks} sips</div>
+            )}
+            <div className="hr-land-bl"><OddsRow round={room.round} label={false} /></div>
+            <div className="hr-land-br">
+              <DrawnCard round={room.round} size={60} />
+              <button className="hr-btn" style={{ width: "auto", background: C.red, color: C.chalk, fontSize: 18, padding: "14px 20px", boxShadow: "0 4px 14px rgba(0,0,0,.45)" }}
+                disabled={drawing} onClick={drawCard}>
+                🎴 Draw
+              </button>
+            </div>
+          </>
+        )}
+      </div>
 
       {(room.phase === "lobby" || room.phase === "betting") && (
         <>
@@ -1379,8 +1470,12 @@ function BigScreenView({ code, onExit }) {
     room.phase === "betting" ? "Bets open" :
     room.phase === "race" ? "🏇 They're racing!" : "Results";
 
+  const odds = nextCardOdds(room.round);
+
   return (
-    <div className="hr-bigwrap">
+    <div>
+      {room.phase === "lobby" ? (
+        <div className="hr-bigwrap">
       {/* header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
         <div>
@@ -1393,7 +1488,6 @@ function BigScreenView({ code, onExit }) {
         </div>
       </div>
 
-      {room.phase === "lobby" ? (
         <div style={{ textAlign: "center", padding: "30px 0" }}>
           <div style={{ width: 180, height: 130, margin: "0 auto" }}><Horse s="H" galloping /></div>
           <div className="hr-display" style={{ fontSize: 34, color: C.chalk, marginBottom: 20 }}>
@@ -1408,25 +1502,24 @@ function BigScreenView({ code, onExit }) {
             {players.length === 0 && <span style={{ color: C.chalkDim, fontStyle: "italic", fontSize: 18 }}>Waiting for the first rider…</span>}
           </div>
         </div>
+        </div>
       ) : (
-        <div className="hr-biggrid">
-          <div>
-            <Track round={room.round} racing={room.phase === "race"} rules={room.rules} big />
-          </div>
-          <aside>
-            {room.phase === "race" && (
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-                <DrawnCard round={room.round} big />
-              </div>
-            )}
+        /* the track fills the screen; the board and the dealt card float over it */
+        <div className="hr-stage">
+          <Track round={room.round} racing={room.phase === "race"} rules={room.rules} big fill lift={1.7} />
+          <aside className="hr-stage-board hr-glass">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, marginBottom: 10 }}>
+              <span className="hr-display" style={{ fontSize: 24, color: C.tote, lineHeight: 1, whiteSpace: "nowrap" }}>Horse Race</span>
+              <span style={{ color: C.chalkDim, fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{phaseLabel}</span>
+            </div>
             {room.phase === "results" && (
               <div className="hr-display hr-chip" style={{ background: C.tote, color: C.ink, borderRadius: 14, padding: "14px 16px", fontSize: 30, textAlign: "center", marginBottom: 12 }}>
                 {SUITS[room.round.winner].sym} {SUITS[room.round.winner].name} wins!
               </div>
             )}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 62px", gap: 10, alignItems: "end", fontSize: 14, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".12em", marginBottom: 9, padding: "0 4px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "end", fontSize: 14, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".12em", marginBottom: 9, padding: "0 4px" }}>
               <span>{room.phase === "results" ? "The damage" : "The betting board"}</span>
-              {room.phase !== "race" && <span style={{ textAlign: "right" }}>🏆 Wins</span>}
+              <span style={{ textAlign: "right" }}>{room.phase === "race" ? "Next card" : "🏆 Wins"}</span>
             </div>
             {/* during the race: one row per suit, showing who's riding it and for how many sips */}
             {room.phase === "race" && SUIT_KEYS.map((s) => {
@@ -1435,9 +1528,9 @@ function BigScreenView({ code, onExit }) {
                 <div key={s} className="hr-chip" style={{
                   display: "flex", alignItems: "center", gap: 10,
                   background: C.turf, border: `1px solid ${C.rail}`, borderRadius: 10,
-                  padding: "13px 14px", marginBottom: 7, fontSize: 19,
+                  padding: "8px 12px", marginBottom: 6, fontSize: 17,
                 }}>
-                  <span style={{ fontSize: 31, lineHeight: 1, width: 34, textAlign: "center", color: SUITS[s].red ? C.red : C.chalk }}>
+                  <span style={{ fontSize: 27, lineHeight: 1, width: 30, textAlign: "center", color: SUITS[s].red ? C.red : C.chalk }}>
                     {SUITS[s].sym}
                   </span>
                   <div style={{ flex: 1, lineHeight: 1.35 }}>
@@ -1445,6 +1538,7 @@ function BigScreenView({ code, onExit }) {
                       ? backers.map((p) => `${p.name} (${p.drinks})`).join(", ")
                       : <span style={{ color: C.chalkDim, fontStyle: "italic" }}>no backers</span>}
                   </div>
+                  <span className="hr-display" style={{ fontSize: 24, color: C.tote, minWidth: 52, textAlign: "right" }}>{odds[s]}%</span>
                 </div>
               );
             })}
@@ -1503,18 +1597,31 @@ function BigScreenView({ code, onExit }) {
               </div>
             )}
           </aside>
+          <div className="hr-stage-side">
+            <div style={{ background: C.tote, color: C.ink, borderRadius: 14, padding: "7px 18px", textAlign: "center", boxShadow: "0 4px 14px rgba(0,0,0,.35)" }}>
+              <div style={{ fontWeight: 800, fontSize: 11, textTransform: "uppercase", letterSpacing: ".12em" }}>Join with code</div>
+              <div className="hr-display" style={{ fontSize: 36, letterSpacing: ".2em", lineHeight: 1.05 }}>{room.code}</div>
+            </div>
+            {room.phase === "race" && (
+              <div className="hr-glass" style={{ padding: "8px 12px 12px" }}>
+                <DrawnCard round={room.round} big />
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      <div style={{ maxWidth: 440, margin: "0 auto" }}>
-        <SpotifyPanel room={room} returnState={{ screen: "bigscreen", joinCode: code }} />
-      </div>
+      <div className="hr-bigwrap" style={{ paddingTop: 8 }}>
+        <div style={{ maxWidth: 440, margin: "0 auto" }}>
+          <SpotifyPanel room={room} returnState={{ screen: "bigscreen", joinCode: code }} />
+        </div>
 
-      <div style={{ textAlign: "center", marginTop: 24 }}>
-        <button className="hr-btn" style={{ background: "transparent", color: C.chalkDim, fontSize: 14, maxWidth: 200, margin: "0 auto" }} onClick={onExit}>
-          Leave
-        </button>
-        <p style={{ color: C.chalkDim, fontSize: 13 }}>Hold your horses — Please drink responsibly.</p>
+        <div style={{ textAlign: "center", marginTop: 24 }}>
+          <button className="hr-btn" style={{ background: "transparent", color: C.chalkDim, fontSize: 14, maxWidth: 200, margin: "0 auto" }} onClick={onExit}>
+            Leave
+          </button>
+          <p style={{ color: C.chalkDim, fontSize: 13 }}>Hold your horses — Please drink responsibly.</p>
+        </div>
       </div>
     </div>
   );
@@ -1530,6 +1637,8 @@ function PlayerView({ code, name, onExit }) {
   const [roster, setRoster] = useState([]);
 
   const rider = useRider(code, name, room);
+  const landscape = useLandscapePhone();
+  const stage = landscape && room?.phase === "race";
   const myWin = room?.phase === "results" ? (rider.betPlaced ? rider.suit === room.round.winner : null) : "spect";
   useRaceSfx(room, myWin);
 
@@ -1595,7 +1704,18 @@ function PlayerView({ code, name, onExit }) {
       )}
 
       {(room.phase === "race" || room.phase === "results") && (
-        <Track round={room.round} racing={room.phase === "race"} rules={room.rules} />
+        <div className={stage ? "hr-landstage" : undefined}>
+          <Track round={room.round} racing={room.phase === "race"} rules={room.rules} fill={stage} />
+          {stage && (
+            <>
+              {rider.betPlaced && (
+                <div className="hr-land-tl hr-glass">You: {SUITS[rider.suit].sym} {rider.drinks} sips</div>
+              )}
+              <div className="hr-land-bl"><OddsRow round={room.round} label={false} /></div>
+              <div className="hr-land-br"><DrawnCard round={room.round} size={60} /></div>
+            </>
+          )}
+        </div>
       )}
 
       {room.phase === "race" && (
