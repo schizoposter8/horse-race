@@ -194,7 +194,7 @@ const LEAD_CLIPS = { S: "/audio/lead-spades.mp3", H: "/audio/lead-hearts.mp3", D
 function useRaceSfx(room, myWin = "spect", ticks = true, caller = false) {
   const prev = useRef({ draw: -1, flipped: -1, phase: null, roundId: null, pending: null });
   const tickTimers = useRef([]);
-  const called = useRef(null);   // the round in which the lead call has already played
+  const called = useRef({ roundId: null, suits: new Set() });   // horses already called this race
   useEffect(() => { if (caller) sfx.preload(Object.values(LEAD_CLIPS)); }, [caller]);
   useEffect(() => {
     if (!room) return;
@@ -213,13 +213,16 @@ function useRaceSfx(room, myWin = "spect", ticks = true, caller = false) {
     if (room.phase === "race" && rd.drawIdx > p.draw) {
       sfx.draw();
       sfx.gallop();
-      // pirate call, once per race: the first time one horse is alone out front
-      if (caller && called.current !== rd.roundId) {
+      // pirate call: when a horse is alone out front past the 2nd track card's
+      // line (step 3 or further). Each horse gets its call at most once per race.
+      if (caller) {
+        if (called.current.roundId !== rd.roundId) called.current = { roundId: rd.roundId, suits: new Set() };
         const best = Math.max(...SUIT_KEYS.map((k) => rd.positions[k]));
         const atTop = SUIT_KEYS.filter((k) => rd.positions[k] === best);
-        if (best > 0 && atTop.length === 1) {
-          called.current = rd.roundId;
-          sfx.clip(LEAD_CLIPS[atTop[0]], 1.1);   // as the horse arrives in front
+        const leader = atTop.length === 1 && best >= 3 ? atTop[0] : null;
+        if (leader && !called.current.suits.has(leader)) {
+          called.current.suits.add(leader);
+          sfx.clip(LEAD_CLIPS[leader], 1.1);   // as the horse arrives in front
         }
       }
       if (rd.flipped > p.flipped) {
