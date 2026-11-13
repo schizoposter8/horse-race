@@ -36,10 +36,15 @@ const HORSE_H = { home: 2.8, race: 3.7 };
 const X0 = 15.3;        // where a horse stands at the gate (step 0)
 const STEP = 4.35;      // distance covered by one card
 const stepX = (k) => X0 - k * STEP;
-const WIRE_X = stepX(6.5);
-// the Clubs photo is a wider crop; it needs a size bump on the race camera but
-// not on the start page, where it already runs in the lane nearest the camera
-const HORSE_SCALE = { home: { S: 1, H: 1, D: 1, C: 0.94 }, race: { S: 1, H: 1, D: 1, C: 1.18 } };
+// the wire sits well clear of the sixth line; the winner's last stride is
+// stretched (see trackX) so it still gallops cleanly through it
+const WIRE_X = stepX(6.85);
+const trackX = (k) => stepX(k <= 6 ? k : 6 + (k - 6) * 1.55);
+// Each photo is cropped differently (Clubs is at full stretch, Diamonds has the
+// least horse in its frame), so equal frame heights give unequal horses. These
+// were measured from the photos: they make the visible horse cover the same
+// area in each one.
+const HORSE_FIT = { S: 0.961, H: 0.97, D: 1.092, C: 0.992 };
 
 /** Point d units along the lap, shifted `off` units outward. Also returns the
  *  direction of travel (tx, tz) and the outward direction (nx, nz). */
@@ -446,6 +451,7 @@ function createScene(host, imgs, live) {
 
   // ---- camera state ----
   const camPos = new THREE.Vector3(0, 30, -56);
+  const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3();
   const camLook = new THREE.Vector3(0, 0, 0);
   const wantPos = new THREE.Vector3(), wantLook = new THREE.Vector3();
   const right = new THREE.Vector3();
@@ -507,7 +513,7 @@ function createScene(host, imgs, live) {
           if (t >= 1) { h.cur = h.to; h.moving = 0; }
           else if (t > 0) { h.cur = h.from + (h.to - h.from) * ease(t); h.moving = 1; }
         } else h.moving = 0;
-        h.d = stepX(h.cur);
+        h.d = trackX(h.cur);
       });
 
       // track cards turn over a moment after the gallop that triggered them
@@ -538,7 +544,13 @@ function createScene(host, imgs, live) {
       const side = -(p.tx * right.x + p.tz * right.z);   // horses travel against d
       if (Math.abs(side) > 0.16) h.facing = side > 0 ? 1 : -1;
 
-      const hgt = (home ? HORSE_H.home : HORSE_H.race) * (home ? HORSE_SCALE.home : HORSE_SCALE.race)[s];
+      // the near lane is closer to the camera and would look bigger; scale each
+      // horse by its distance against the middle of the track so all four read
+      // the same size, whatever the camera angle
+      const mid = pt(h.d, 0);
+      tmpV.set(mid.x, 1.6, mid.z);
+      const near = THREE.MathUtils.clamp(camPos.distanceTo(tmpV2.set(p.x, 1.6, p.z)) / camPos.distanceTo(tmpV), 0.75, 1.3);
+      const hgt = (home ? HORSE_H.home : HORSE_H.race) * HORSE_FIT[s] * near;
       h.mesh.position.copy(h.pos);
       h.mesh.scale.set(h.facing * hgt * h.aspect, hgt, 1);
       h.mesh.rotation.y = Math.atan2(camPos.x - p.x, camPos.z - p.z);
