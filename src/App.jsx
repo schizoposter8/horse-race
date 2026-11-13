@@ -317,7 +317,12 @@ function Styles() {
       .hr-stage{position:relative;height:100vh;height:100dvh;min-height:420px;overflow:hidden;background:${C.turfDeep}}
       .hr-stage-board{position:absolute;left:14px;top:14px;z-index:3;width:min(340px,26vw);min-width:250px;max-height:calc(100% - 28px);overflow:auto;padding:12px;box-sizing:border-box}
       .hr-stage-side{position:absolute;right:66px;top:14px;z-index:3;display:flex;flex-direction:column;align-items:flex-end;gap:12px}
-      .hr-landstage{position:fixed;inset:0;z-index:40;background:${C.turfDeep}}
+      .hr-landstage{position:fixed;inset:0;z-index:40;background:${C.turfDeep};overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+      .hr-landscreen{position:relative;height:100%;min-height:240px}
+      .hr-landbelow{padding:14px max(14px,env(safe-area-inset-right)) 22px max(14px,env(safe-area-inset-left))}
+      .hr-land-more{position:absolute;left:max(10px,env(safe-area-inset-left));bottom:48px;z-index:3;border:1px solid rgba(255,255,255,.16);background:rgba(7,48,30,.8);color:${C.chalk};font-family:inherit;font-size:12px;font-weight:700;letter-spacing:.06em;border-radius:999px;padding:5px 14px;cursor:pointer}
+      .hr-bets{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+      .hr-betcard{background:${C.turf};border:1px solid ${C.rail};border-radius:12px;padding:10px 12px;min-width:0}
       .hr-landstage .hr-fillcomm{bottom:auto;top:10px;font-size:13px;padding:5px 14px}
       .hr-landstage .hr-fillbanner{top:46px;width:min(380px,56%)}
       .hr-land-tl{position:absolute;left:max(10px,env(safe-area-inset-left));top:10px;z-index:3;padding:6px 12px;font-size:13px}
@@ -1016,6 +1021,49 @@ function BetForm({ rider }) {
 }
 
 /* personal results: outcome card, incoming sips, and the winner's give-out UI */
+/* who is riding which horse, and for how many sips — one card per suit */
+function BetsBoard({ players, round, meId }) {
+  const odds = winOdds(round);
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: C.chalkDim, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>
+        Who's on what
+      </div>
+      <div className="hr-bets">
+        {SUIT_KEYS.map((s) => {
+          const backers = players.filter((p) => p.roundId === round.roundId && p.suit === s);
+          const total = backers.reduce((a, p) => a + (p.drinks || 0), 0);
+          const mine = backers.some((p) => p.id === meId);
+          return (
+            <div key={s} className="hr-betcard" style={mine ? { borderColor: C.tote, background: "rgba(240,194,75,.12)" } : undefined}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, marginBottom: 6 }}>
+                <span style={{ fontWeight: 800, fontSize: 15, whiteSpace: "nowrap" }}>
+                  <span style={{ fontSize: 20, color: SUITS[s].red ? C.red : C.chalk }}>{SUITS[s].sym}</span> {SUITS[s].name}
+                </span>
+                <span className="hr-display" style={{ fontSize: 20, color: C.tote }}>{odds[s]}%</span>
+              </div>
+              {backers.length === 0 && <div style={{ color: C.chalkDim, fontStyle: "italic", fontSize: 14 }}>No backers</div>}
+              {backers.map((p) => (
+                <div key={p.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 15, padding: "2px 0" }}>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: p.id === meId ? 800 : 500, color: p.id === meId ? C.tote : C.chalk }}>
+                    {p.name}{p.id === meId ? " (you)" : ""}
+                  </span>
+                  <span style={{ whiteSpace: "nowrap", color: C.chalkDim }}>{p.drinks} sip{p.drinks === 1 ? "" : "s"}</span>
+                </div>
+              ))}
+              {backers.length > 1 && (
+                <div style={{ borderTop: `1px dashed ${C.rail}`, marginTop: 5, paddingTop: 4, fontSize: 12, color: C.chalkDim, textAlign: "right" }}>
+                  {total} sips riding
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* your result, laid over the winner's close-up so it shows without scrolling */
 function ResultBadge({ rider, room, roster }) {
   const bet = rider.betPlaced ? { suit: rider.suit, drinks: rider.drinks } : null;
@@ -1488,11 +1536,13 @@ function HostView({ name, resumeCode, onExit }) {
       {/* one track for every phase, so the 3D scene carries on between them.
           On a phone held sideways during a race it takes over the whole screen. */}
       <div className={stage ? "hr-landstage" : undefined}>
+       <div className={stage ? "hr-landscreen" : undefined}>
         <Track round={room.round} racing={room.phase === "race"} rules={room.rules} fill={stage}>
           {room.phase === "results" && <ResultBadge rider={rider} room={room} roster={players} />}
         </Track>
         {stage && (
           <>
+            <button className="hr-land-more" onClick={(e) => e.currentTarget.closest(".hr-landstage").scrollTo({ top: 99999, behavior: "smooth" })}>▾ Bets</button>
             {rider.betPlaced && (
               <div className="hr-land-tl hr-glass">You: {SUITS[rider.suit].sym} {rider.drinks} sips</div>
             )}
@@ -1506,6 +1556,8 @@ function HostView({ name, resumeCode, onExit }) {
             </div>
           </>
         )}
+       </div>
+       {stage && <div className="hr-landbelow"><BetsBoard players={players} round={room.round} meId={rider.id} /></div>}
       </div>
 
       {(room.phase === "lobby" || room.phase === "betting") && (
@@ -1605,6 +1657,7 @@ function HostView({ name, resumeCode, onExit }) {
               )}
             </div>
           </div>
+          <div style={{ marginTop: 18 }}><BetsBoard players={players} round={room.round} meId={rider.id} /></div>
         </>
       )}
 
@@ -1896,7 +1949,7 @@ function PlayerView({ code, name, onExit }) {
 
   // during results, watch the full roster (to pick targets + see sips sent to you)
   useEffect(() => {
-    if (room?.phase !== "results" && room?.phase !== "betting") return;
+    if (!room || room.phase === "lobby") return;
     let live = true;
     const load = async () => {
       const ps = await loadRoster(code);
@@ -1906,7 +1959,7 @@ function PlayerView({ code, name, onExit }) {
     const unsub = subscribePrefix(`hr:${code}:p:`, load);
     const t = setInterval(load, 8000);
     return () => { live = false; unsub(); clearInterval(t); };
-  }, [room?.phase, code]);
+  }, [room?.phase === "lobby", !room, code]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (gone) return (
     <div className="hr-wrap" style={{ textAlign: "center", paddingTop: 60 }}>
@@ -1943,11 +1996,13 @@ function PlayerView({ code, name, onExit }) {
 
       {(room.phase === "race" || room.phase === "results") && (
         <div className={stage ? "hr-landstage" : undefined}>
+         <div className={stage ? "hr-landscreen" : undefined}>
           <Track round={room.round} racing={room.phase === "race"} rules={room.rules} fill={stage}>
             {room.phase === "results" && <ResultBadge rider={rider} room={room} roster={roster} />}
           </Track>
           {stage && (
             <>
+              <button className="hr-land-more" onClick={(e) => e.currentTarget.closest(".hr-landstage").scrollTo({ top: 99999, behavior: "smooth" })}>▾ Bets</button>
               {rider.betPlaced && (
                 <div className="hr-land-tl hr-glass">You: {SUITS[rider.suit].sym} {rider.drinks} sips</div>
               )}
@@ -1955,6 +2010,8 @@ function PlayerView({ code, name, onExit }) {
               <div className="hr-land-br"><DrawnCard round={room.round} size={60} /></div>
             </>
           )}
+         </div>
+         {stage && <div className="hr-landbelow"><BetsBoard players={roster} round={room.round} meId={rider.id} /></div>}
         </div>
       )}
 
@@ -1968,6 +2025,7 @@ function PlayerView({ code, name, onExit }) {
               </div>
             )}
           </div>
+          <div style={{ marginTop: 18 }}><BetsBoard players={roster} round={room.round} meId={rider.id} /></div>
         </>
       )}
 
