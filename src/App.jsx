@@ -46,12 +46,68 @@ const C = {
 const sfx = (() => {
   let ctx = null;
   let enabled = true;
+  let silentEl = null;
+  let noiseBuf = null;
   const ensure = () => {
     if (!ctx) {
       try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch { /* no audio */ }
     }
-    if (ctx && ctx.state === "suspended") ctx.resume().catch(() => {});
+    // phones pause audio when locked or switched away ("suspended", or
+    // "interrupted" on iPhone) — wake it again
+    if (ctx && ctx.state !== "running" && ctx.state !== "closed") ctx.resume().catch(() => {});
     return ctx;
+  };
+  // Run on every tap. Phones only allow audio to start from a tap, so this is
+  // the moment to wake it.
+  const unlock = () => {
+    // iPhone: by default web sounds obey the silent switch; ask to be treated
+    // like media instead (newer Safari) ...
+    try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch { /* older browser */ }
+    const c = ensure();
+    if (!c) return;
+    // ... and for older iPhones, a silent media clip does the same job
+    if (!silentEl) {
+      try {
+        silentEl = document.createElement("audio");
+        silentEl.setAttribute("playsinline", "");
+        silentEl.loop = true;
+        silentEl.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+        silentEl.play().catch(() => {});
+      } catch { /* fine */ }
+    }
+    // a one-sample silent blip, played inside the tap, is what actually opens audio on iOS
+    try {
+      const b = c.createBuffer(1, 1, 22050);
+      const src = c.createBufferSource();
+      src.buffer = b; src.connect(c.destination); src.start(0);
+    } catch { /* fine */ }
+  };
+  // one hoof strike: a short low thump plus a puff of filtered noise
+  const hoof = (t, gain) => {
+    const c = ctx;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = "sine";
+    o.frequency.setValueAtTime(170, t);
+    o.frequency.exponentialRampToValueAtTime(60, t + 0.07);
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    o.connect(g); g.connect(c.destination);
+    o.start(t); o.stop(t + 0.12);
+    if (!noiseBuf) {
+      noiseBuf = c.createBuffer(1, Math.floor(c.sampleRate * 0.06), c.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+    }
+    const n = c.createBufferSource();
+    const f = c.createBiquadFilter();
+    const ng = c.createGain();
+    n.buffer = noiseBuf;
+    f.type = "bandpass"; f.frequency.value = 900; f.Q.value = 0.8;
+    ng.gain.setValueAtTime(gain * 0.7, t);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    n.connect(f); f.connect(ng); ng.connect(c.destination);
+    n.start(t); n.stop(t + 0.06);
   };
   const tone = (freq, dur = 0.08, type = "square", gain = 0.05, delay = 0) => {
     if (!enabled) return;
@@ -73,7 +129,20 @@ const sfx = (() => {
   return {
     setEnabled(v) { enabled = v; if (v) ensure(); },
     isEnabled() { return enabled; },
-    unlock: ensure,
+    unlock,
+    // a horse galloping to its next spot: four-beat hoofbeats, louder in the middle
+    gallop(delay = 0.45, dur = 1.1) {
+      if (!enabled) return;
+      const c = ensure();
+      if (!c) return;
+      const start = c.currentTime + delay;
+      const stride = 0.27;
+      for (let k = 0; k * stride < dur; k++) {
+        const t0 = start + k * stride;
+        const swell = 0.5 + 0.5 * Math.sin(Math.PI * Math.min(1, (k * stride) / dur));
+        [0, 0.055, 0.11, 0.15].forEach((off, i) => hoof(t0 + off, (0.09 + 0.05 * swell) * (i === 3 ? 1.25 : 1)));
+      }
+    },
     draw() { tone(190, 0.05, "square", 0.04); tone(255, 0.05, "square", 0.04, 0.07); buzz(20); },
     flip() { tone(330, 0.12, "sawtooth", 0.05); tone(220, 0.16, "sawtooth", 0.05, 0.1); tone(147, 0.24, "sawtooth", 0.05, 0.2); buzz([70, 40, 70]); },
     everyone() { tone(880, 0.09, "square", 0.05, 0.35); tone(880, 0.09, "square", 0.05, 0.48); tone(1175, 0.14, "square", 0.05, 0.62); },
@@ -89,18 +158,26 @@ const sfx = (() => {
  * myWin: true → win fanfare at results, false → sad trombone,
  * "spect" → fanfare (host & big screen), null → silent at results.
  */
-function useRaceSfx(room, myWin = "spect") {
-  const prev = useRef({ draw: -1, flipped: -1, phase: null, roundId: null });
+function useRaceSfx(room, myWin = "spect", ticks = true) {
+  const prev = useRef({ draw: -1, flipped: -1, phase: null, roundId: null, pending: null });
+  const tickTimers = useRef([]);
   useEffect(() => {
     if (!room) return;
     const rd = room.round;
     const p = prev.current;
     if (p.roundId !== rd.roundId) {
-      prev.current = { draw: rd.drawIdx, flipped: rd.flipped, phase: room.phase, roundId: rd.roundId };
+      prev.current = { draw: rd.drawIdx, flipped: rd.flipped, phase: room.phase, roundId: rd.roundId, pending: rd.pendingAt };
       return;
+    }
+    // the 3-2-1 countdown (the host's device ticks on its own, in time with the draw)
+    if (ticks && room.phase === "race" && rd.pendingAt && rd.pendingAt !== p.pending) {
+      tickTimers.current.forEach(clearTimeout);
+      const late = Math.max(0, Date.now() - rd.pendingAt);
+      tickTimers.current = [0, 900, 1800].filter((ms) => ms >= late - 150).map((ms) => setTimeout(() => sfx.tick(), ms - late));
     }
     if (room.phase === "race" && rd.drawIdx > p.draw) {
       sfx.draw();
+      sfx.gallop();
       if (rd.flipped > p.flipped) {
         // the flip happens visually after the forward gallop — match the sound to it
         const flipDrink = room.rules?.flipDrink;
@@ -116,8 +193,9 @@ function useRaceSfx(room, myWin = "spect") {
       else if (myWin === false) sfx.lose();
       else if (myWin === "spect") sfx.win();
     }
-    prev.current = { draw: rd.drawIdx, flipped: rd.flipped, phase: room.phase, roundId: rd.roundId };
-  }, [room, myWin]);
+    prev.current = { draw: rd.drawIdx, flipped: rd.flipped, phase: room.phase, roundId: rd.roundId, pending: rd.pendingAt };
+  }, [room, myWin, ticks]);
+  useEffect(() => () => tickTimers.current.forEach(clearTimeout), []);
 }
 
 function SoundToggle() {
@@ -125,7 +203,7 @@ function SoundToggle() {
   return (
     <button
       aria-label={on ? "Mute sound" : "Unmute sound"}
-      onClick={() => { sfx.setEnabled(!on); setOn(!on); }}
+      onClick={() => { sfx.setEnabled(!on); setOn(!on); if (!on) { sfx.unlock(); sfx.sent(); } }}
       style={{
         position: "fixed", top: 10, right: 10, zIndex: 50,
         width: 42, height: 42, borderRadius: "50%",
@@ -1284,7 +1362,7 @@ function HostView({ name, resumeCode, onExit }) {
   // the host rides too: registered as a player, can bet and win like anyone
   const rider = useRider(code, name, room);
   const myWin = room?.phase === "results" ? (rider.betPlaced ? rider.suit === room.round.winner : "spect") : "spect";
-  useRaceSfx(room, myWin);
+  useRaceSfx(room, myWin, false);   // the host ticks the countdown itself
 
   const writeRoom = useCallback(async (r) => {
     setRoom(r);
@@ -1923,9 +2001,16 @@ export default function App() {
 
   // unlock audio on the first tap anywhere (browser autoplay policy)
   useEffect(() => {
-    const h = () => { sfx.unlock(); };
-    window.addEventListener("pointerdown", h, { once: true });
-    return () => window.removeEventListener("pointerdown", h);
+    // iPhones only count touchend/click as a real tap for audio, so listen to all of them
+    const h = () => sfx.unlock();
+    const evs = ["pointerdown", "touchend", "click", "keydown"];
+    evs.forEach((e) => window.addEventListener(e, h, { passive: true }));
+    const vis = () => { if (document.visibilityState === "visible") sfx.unlock(); };
+    document.addEventListener("visibilitychange", vis);
+    return () => {
+      evs.forEach((e) => window.removeEventListener(e, h));
+      document.removeEventListener("visibilitychange", vis);
+    };
   }, []);
 
   // returning from Spotify authorization: restore where the user was
