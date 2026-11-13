@@ -589,12 +589,14 @@ function DrawnCard({ round, big = false, size = 0 }) {
           <div style={{ ...face, background: C.card }}>
             {suit && (
               <>
-                <span style={{ position: "absolute", top: 6, left: 8, fontSize: big ? 20 : 15, fontWeight: 800, lineHeight: 1.05, color: suitColor, textAlign: "center" }}>
-                  {rank}<br />{SUITS[suit].sym}
+                {/* everything scales with the card's width, like a real card: small
+                    corner indices tucked into the corners, one big pip in the middle */}
+                <span style={{ position: "absolute", top: w * 0.05, left: w * 0.06, width: w * 0.2, fontSize: w * 0.155, fontWeight: 800, lineHeight: 1, color: suitColor, textAlign: "center", fontFamily: "Georgia, 'Times New Roman', serif" }}>
+                  {rank}<br /><span style={{ fontSize: w * 0.13 }}>{SUITS[suit].sym}</span>
                 </span>
-                <span style={{ fontSize: big ? 58 : 40, color: suitColor, lineHeight: 1 }}>{SUITS[suit].sym}</span>
-                <span style={{ position: "absolute", bottom: 6, right: 8, fontSize: big ? 20 : 15, fontWeight: 800, lineHeight: 1.05, color: suitColor, textAlign: "center", transform: "rotate(180deg)" }}>
-                  {rank}<br />{SUITS[suit].sym}
+                <span style={{ fontSize: w * 0.4, color: suitColor, lineHeight: 1 }}>{SUITS[suit].sym}</span>
+                <span style={{ position: "absolute", bottom: w * 0.05, right: w * 0.06, width: w * 0.2, fontSize: w * 0.155, fontWeight: 800, lineHeight: 1, color: suitColor, textAlign: "center", fontFamily: "Georgia, 'Times New Roman', serif", transform: "rotate(180deg)" }}>
+                  {rank}<br /><span style={{ fontSize: w * 0.13 }}>{SUITS[suit].sym}</span>
                 </span>
               </>
             )}
