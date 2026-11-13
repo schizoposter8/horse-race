@@ -200,8 +200,15 @@ function cardTexture(card, n) {
       g.lineWidth = 4; g.strokeStyle = "rgba(0,0,0,.5)"; g.stroke();
       g.fillStyle = IS_RED[s] ? "#D63A3A" : "#131009";
       g.textAlign = "center"; g.textBaseline = "middle";
-      g.font = "bold 44px Georgia, 'Times New Roman', serif"; g.fillText(rank, w / 2, 36);
-      g.font = "bold 118px Georgia, 'Times New Roman', serif"; g.fillText(SUIT_SYM[s], w / 2, 112);
+      // corner indices (rank over suit), mirrored in the opposite corner
+      const corner = () => {
+        g.font = `bold ${rank.length > 1 ? 26 : 30}px Georgia, 'Times New Roman', serif`; g.fillText(rank, 22, 24);
+        g.font = "bold 24px Georgia, 'Times New Roman', serif"; g.fillText(SUIT_SYM[s], 22, 50);
+      };
+      corner();
+      g.save(); g.translate(w, h); g.rotate(Math.PI); corner(); g.restore();
+      // one big pip in the middle
+      g.font = "bold 74px Georgia, 'Times New Roman', serif"; g.fillText(SUIT_SYM[s], w / 2, h / 2 + 4);
     }
   });
 }
@@ -496,23 +503,40 @@ function createScene(host, imgs, live) {
         seen.flipped = round.flipped;
       }
       const drew = !fresh && seen.drawIdx !== null && round.drawIdx !== seen.drawIdx;
+      const drawnSuit = drew && round.lastCard ? round.lastCard.slice(-1) : null;
+      // suits of the track cards turned over by this draw
+      const knocked = drew ? round.trackSuits.slice(seen.flipped, round.flipped).map((c) => c.slice(-1)) : [];
       SUIT_KEYS.forEach((s) => {
         const h = horses[s];
         const tgt = Math.min(round.positions[s], STEPS);
         const stumble = round.lastFlip === s && !round.winner;
+        // where the drawn horse got to before any track card knocked it back
+        const pre = s === drawnSuit ? Math.min(h.target + 1, STEPS) : h.target;
         if (fresh || h.target === null) {
-          h.cur = h.from = h.to = h.target = tgt; h.moving = 0; h.stumbleAt = -99;
+          h.cur = h.from = h.to = h.target = tgt; h.moving = 0; h.stumbleAt = -99; h.next = null;
+        } else if (drew && s === drawnSuit && knocked.includes(s) && pre !== tgt) {
+          // its own suit came up on the track: gallop forward on the draw, then
+          // fall back when that card turns over
+          h.from = h.cur; h.to = pre; h.t0 = now + 0.5;
+          h.next = { to: tgt, t0: now + 2.1 };
+          h.target = tgt;
         } else if (tgt !== h.target) {
-          // match the 2D timing: a beat after the reveal, later if knocked back
+          // a beat after the reveal, later if knocked back
           h.from = h.cur; h.to = h.target = tgt;
           h.t0 = now + (stumble ? 2.1 : 0.5);
+          h.next = null;
         }
-        if (drew && stumble) h.stumbleAt = now + 1.8;
+        if (drew && (stumble || knocked.includes(s))) h.stumbleAt = now + 1.8;
         if (h.cur !== h.to) {
           const t = (now - h.t0) / 1.1;
           if (t >= 1) { h.cur = h.to; h.moving = 0; }
           else if (t > 0) { h.cur = h.from + (h.to - h.from) * ease(t); h.moving = 1; }
+          else h.moving = 0;
         } else h.moving = 0;
+        // the second leg, once the first has finished
+        if (h.next && h.cur === h.to && now >= h.next.t0) {
+          h.from = h.cur; h.to = h.next.to; h.t0 = h.next.t0; h.next = null;
+        }
         h.d = trackX(h.cur);
       });
 
