@@ -189,13 +189,9 @@ const sfx = (() => {
  * myWin: true → win fanfare at results, false → sad trombone,
  * "spect" → fanfare (host & big screen), null → silent at results.
  */
-const LEAD_CLIPS = { S: "/audio/lead-spades.mp3", H: "/audio/lead-hearts.mp3", D: "/audio/lead-diamonds.mp3", C: "/audio/lead-clubs.mp3" };
-
-function useRaceSfx(room, myWin = "spect", ticks = true, caller = false) {
+function useRaceSfx(room, myWin = "spect", ticks = true) {
   const prev = useRef({ draw: -1, flipped: -1, phase: null, roundId: null, pending: null });
   const tickTimers = useRef([]);
-  const called = useRef({ roundId: null, suits: new Set() });   // horses already called this race
-  useEffect(() => { if (caller) sfx.preload(Object.values(LEAD_CLIPS)); }, [caller]);
   useEffect(() => {
     if (!room) return;
     const rd = room.round;
@@ -213,18 +209,6 @@ function useRaceSfx(room, myWin = "spect", ticks = true, caller = false) {
     if (room.phase === "race" && rd.drawIdx > p.draw) {
       sfx.draw();
       sfx.gallop();
-      // pirate call: when a horse is alone out front past the 2nd track card's
-      // line (step 3 or further). Each horse gets its call at most once per race.
-      if (caller) {
-        if (called.current.roundId !== rd.roundId) called.current = { roundId: rd.roundId, suits: new Set() };
-        const best = Math.max(...SUIT_KEYS.map((k) => rd.positions[k]));
-        const atTop = SUIT_KEYS.filter((k) => rd.positions[k] === best);
-        const leader = atTop.length === 1 && best >= 3 ? atTop[0] : null;
-        if (leader && !called.current.suits.has(leader)) {
-          called.current.suits.add(leader);
-          sfx.clip(LEAD_CLIPS[leader], 1.1);   // as the horse arrives in front
-        }
-      }
       if (rd.flipped > p.flipped) {
         // the flip happens visually after the forward gallop — match the sound to it
         const flipDrink = room.rules?.flipDrink;
@@ -241,7 +225,7 @@ function useRaceSfx(room, myWin = "spect", ticks = true, caller = false) {
       else if (myWin === "spect") sfx.win();
     }
     prev.current = { draw: rd.drawIdx, flipped: rd.flipped, phase: room.phase, roundId: rd.roundId, pending: rd.pendingAt };
-  }, [room, myWin, ticks, caller]);
+  }, [room, myWin, ticks]);
   useEffect(() => () => tickTimers.current.forEach(clearTimeout), []);
 }
 
@@ -1459,7 +1443,7 @@ function HostView({ name, resumeCode, onExit }) {
   // the host rides too: registered as a player, can bet and win like anyone
   const rider = useRider(code, name, room);
   const myWin = room?.phase === "results" ? (rider.betPlaced ? rider.suit === room.round.winner : "spect") : "spect";
-  useRaceSfx(room, myWin, false, true);   // the host ticks the countdown itself; host and TV play the caller
+  useRaceSfx(room, myWin, false);   // the host ticks the countdown itself
 
   const writeRoom = useCallback(async (r) => {
     setRoom(r);
@@ -1765,7 +1749,7 @@ function BigScreenView({ code, onExit }) {
   const [players, setPlayers] = useState([]);
   const [gone, setGone] = useState(false);
 
-  useRaceSfx(room, "spect", true, true);
+  useRaceSfx(room);
 
   // poll room
   useEffect(() => {
