@@ -82,6 +82,21 @@ const sfx = (() => {
       src.buffer = b; src.connect(c.destination); src.start(0);
     } catch { /* fine */ }
   };
+  const clips = {};
+  const loadClip = (url) => {
+    if (!clips[url]) {
+      clips[url] = fetch(url)
+        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(r.status))))
+        .then((ab) => {
+          const c = ensure();
+          if (!c) return null;
+          // Safari's older decodeAudioData only takes callbacks
+          return new Promise((res, rej) => { const p = c.decodeAudioData(ab, res, rej); if (p && p.then) p.then(res, rej); });
+        })
+        .catch(() => { delete clips[url]; return null; });   // missing file: stay silent, try again later
+    }
+    return clips[url];
+  };
   // one hoof strike: a short low thump plus a puff of filtered noise
   const hoof = (t, gain) => {
     const c = ctx;
@@ -130,6 +145,22 @@ const sfx = (() => {
     setEnabled(v) { enabled = v; if (v) ensure(); },
     isEnabled() { return enabled; },
     unlock,
+    // recorded clips (the race caller). Decoded once, then played through the same
+    // audio engine as the game sounds, so they work wherever the ticks do.
+    preload(urls) { urls.forEach((u) => loadClip(u)); },
+    clip(url, delay = 0) {
+      if (!enabled) return;
+      const c = ensure();
+      if (!c) return;
+      loadClip(url).then((buf) => {
+        if (!buf || !enabled) return;
+        const src = c.createBufferSource();
+        const g = c.createGain();
+        src.buffer = buf; g.gain.value = 1;
+        src.connect(g); g.connect(c.destination);
+        src.start(c.currentTime + delay);
+      });
+    },
     // a horse galloping to its next spot: four-beat hoofbeats, louder in the middle
     gallop(delay = 0.45, dur = 1.1) {
       if (!enabled) return;
@@ -158,9 +189,13 @@ const sfx = (() => {
  * myWin: true → win fanfare at results, false → sad trombone,
  * "spect" → fanfare (host & big screen), null → silent at results.
  */
-function useRaceSfx(room, myWin = "spect", ticks = true) {
+const LEAD_CLIPS = { S: "/audio/lead-spades.mp3", H: "/audio/lead-hearts.mp3", D: "/audio/lead-diamonds.mp3", C: "/audio/lead-clubs.mp3" };
+
+function useRaceSfx(room, myWin = "spect", ticks = true, caller = false) {
   const prev = useRef({ draw: -1, flipped: -1, phase: null, roundId: null, pending: null });
   const tickTimers = useRef([]);
+  const called = useRef(null);   // the round in which the lead call has already played
+  useEffect(() => { if (caller) sfx.preload(Object.values(LEAD_CLIPS)); }, [caller]);
   useEffect(() => {
     if (!room) return;
     const rd = room.round;
@@ -178,6 +213,15 @@ function useRaceSfx(room, myWin = "spect", ticks = true) {
     if (room.phase === "race" && rd.drawIdx > p.draw) {
       sfx.draw();
       sfx.gallop();
+      // pirate call, once per race: the first time one horse is alone out front
+      if (caller && called.current !== rd.roundId) {
+        const best = Math.max(...SUIT_KEYS.map((k) => rd.positions[k]));
+        const atTop = SUIT_KEYS.filter((k) => rd.positions[k] === best);
+        if (best > 0 && atTop.length === 1) {
+          called.current = rd.roundId;
+          sfx.clip(LEAD_CLIPS[atTop[0]], 1.1);   // as the horse arrives in front
+        }
+      }
       if (rd.flipped > p.flipped) {
         // the flip happens visually after the forward gallop — match the sound to it
         const flipDrink = room.rules?.flipDrink;
@@ -194,7 +238,7 @@ function useRaceSfx(room, myWin = "spect", ticks = true) {
       else if (myWin === "spect") sfx.win();
     }
     prev.current = { draw: rd.drawIdx, flipped: rd.flipped, phase: room.phase, roundId: rd.roundId, pending: rd.pendingAt };
-  }, [room, myWin, ticks]);
+  }, [room, myWin, ticks, caller]);
   useEffect(() => () => tickTimers.current.forEach(clearTimeout), []);
 }
 
@@ -1412,7 +1456,7 @@ function HostView({ name, resumeCode, onExit }) {
   // the host rides too: registered as a player, can bet and win like anyone
   const rider = useRider(code, name, room);
   const myWin = room?.phase === "results" ? (rider.betPlaced ? rider.suit === room.round.winner : "spect") : "spect";
-  useRaceSfx(room, myWin, false);   // the host ticks the countdown itself
+  useRaceSfx(room, myWin, false, true);   // the host ticks the countdown itself; host and TV play the caller
 
   const writeRoom = useCallback(async (r) => {
     setRoom(r);
@@ -1718,7 +1762,7 @@ function BigScreenView({ code, onExit }) {
   const [players, setPlayers] = useState([]);
   const [gone, setGone] = useState(false);
 
-  useRaceSfx(room);
+  useRaceSfx(room, "spect", true, true);
 
   // poll room
   useEffect(() => {
